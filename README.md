@@ -41,7 +41,7 @@ Email addresses are blurred. The expanded screenshot shows the earlier app label
 | OpenCode Go | Rolling, weekly, monthly | Plan label through the generic plugin quota API |
 
 OpenCode Go requires CLIProxyAPI v8 and a plugin that implements the generic quota capability.
-The companion [OpenCode Go plugin](https://github.com/massiveits/opencode-go-cliproxyapi) needs the native quota changes in our upstream contribution.
+The companion [OpenCode Go plugin](https://github.com/massiveits/opencode-go-cliproxyapi) needs the native quota changes in [upstream pull request #10](https://github.com/massiveits/opencode-go-cliproxyapi/pull/10).
 A plugin version that exposes only its separate quota page does not work with this integration.
 
 Pace compares used quota with elapsed time in a fixed window. It is an estimate, not a provider guarantee.
