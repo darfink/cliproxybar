@@ -1,0 +1,10 @@
+.build/
+.swiftpm/
+dist/
+*.app/
+.DS_Store
+*.p12
+*.mobileprovision
+.env
+.env.*
+*.keychain-db
