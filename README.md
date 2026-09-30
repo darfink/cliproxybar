@@ -8,6 +8,21 @@
 CLIProxyBar connects to your local CLIProxyAPI instance and shows quota usage for each account.
 A compact menu keeps the essentials close. Option-click opens an expanded view with reset times and pace indicators.
 
+## Screenshots
+
+<table>
+  <tr>
+    <th>Compact view</th>
+    <th>Option-click for details</th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/compact.png" width="280" alt="Compact menu with colored Claude Code, Codex, and OpenCode Go quota gauges"></td>
+    <td valign="top"><img src="docs/screenshots/expanded.png" width="360" alt="Expanded menu with quota usage, pace markers, reset times, and account details"></td>
+  </tr>
+</table>
+
+Email addresses are blurred. The expanded screenshot shows the earlier app label in its Quit action.
+
 ## Features
 
 - Compact and expanded menus with provider colors and quota gauges.
