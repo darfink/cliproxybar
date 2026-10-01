@@ -192,7 +192,7 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
         let itemDescriptions = items.map { item -> String in
             let providerName = item.provider.displayName
             if item.isForbidden {
-                return "\(providerName): \("status.error".localized())"
+                return "\(providerName): Account disabled"
             }
             if let pair = item.quotaPair {
                 let topDesc = "\(pair.top.labelKey.localized()): \(StatusBarQuotaItemView.accessibilityValue(for: pair.top, displayMode: displayMode))"
@@ -400,9 +400,9 @@ struct StatusBarQuotaItemView: View {
             }
             
             if item.isForbidden {
-                Image(systemName: "exclamationmark.triangle.fill")
+                Image(systemName: "pause.circle")
                     .font(.system(size: 10))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.secondary)
             } else if let quotaPair = item.quotaPair {
                 VStack(alignment: .trailing, spacing: 0) {
                     compactQuotaText(quotaPair.top.remainingPercentage)

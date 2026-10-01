@@ -387,8 +387,9 @@ private struct CompactQuotaAccountView: View {
                         .help(issue)
                 }
                 if account.quota.isForbidden {
-                    Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
-                        .help("Account disabled or unavailable")
+                    Image(systemName: "pause.circle").foregroundStyle(.secondary)
+                        .help("Account disabled in CLIProxyAPI")
+                        .accessibilityLabel("Account disabled")
                 }
                 Text(displayMode == .used ? "usage" : "remaining").font(.system(size: 10)).foregroundStyle(.tertiary)
             }

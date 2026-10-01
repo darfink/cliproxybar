@@ -33,7 +33,9 @@ struct ProxyAccount: Decodable, Sendable {
     }
     func providerQuota() -> ProviderQuota {
         if var fetchedQuota {
-            fetchedQuota.isForbidden = disabled == true || unavailable == true
+            // Proxy unavailability includes temporary rate-limit cooldowns.
+            // It does not mean the account is disabled or quota access failed.
+            fetchedQuota.isForbidden = disabled == true
             return fetchedQuota
         }
         let candidates = ([quota].compactMap { $0 } + Array((model_quotas ?? [:]).values))
@@ -58,7 +60,7 @@ struct ProxyAccount: Decodable, Sendable {
             }
         }
         let observed = Self.observationDate(latest?.observed_at)
-        return ProviderQuota(models: models, lastUpdated: observed, isForbidden: disabled == true || unavailable == true, planType: signals["x-codex-plan-type"], accountDisplayName: displayName)
+        return ProviderQuota(models: models, lastUpdated: observed, isForbidden: disabled == true, planType: signals["x-codex-plan-type"], accountDisplayName: displayName)
     }
 }
 

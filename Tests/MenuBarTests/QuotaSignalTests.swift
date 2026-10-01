@@ -31,6 +31,19 @@ final class QuotaSignalTests: XCTestCase {
     func testDisabledAccountIsFlagged() throws {
         XCTAssertTrue(try decode(#"{"name":"test","provider":"claude","disabled":true}"#).providerQuota().isForbidden)
     }
+    func testQuotaCooldownKeepsPassivePercentagesWithoutDisabledFlag() throws {
+        let account = try decode(#"{"name":"test","provider":"claude","disabled":false,"unavailable":true,"quota":{"signals":{"Anthropic-Ratelimit-Unified-5h-Utilization":"1","Anthropic-Ratelimit-Unified-7d-Utilization":"0.85"}}}"#)
+        let quota = account.providerQuota()
+        XCTAssertFalse(quota.isForbidden)
+        XCTAssertEqual(quota.models[0].percentage, 0)
+        XCTAssertEqual(quota.models[1].percentage, 15, accuracy: 0.001)
+        let pair = try XCTUnwrap(MenuBarQuotaPair.resolve(for: .claude, from: quota.models))
+        XCTAssertEqual(pair.top.remainingPercentage, 0)
+        XCTAssertEqual(pair.bottom.remainingPercentage, 15, accuracy: 0.001)
+    }
+    func testProxyUnavailabilityDoesNotImplyDisablement() throws {
+        XCTAssertFalse(try decode(#"{"name":"test","provider":"claude","unavailable":true}"#).providerQuota().isForbidden)
+    }
     func testRejectsNonLocalOrCredentialBearingEndpoints() throws {
         for endpoint in ["http://example.com", "https://127.0.0.1:8317", "http://user:pass@localhost:8317", "http://localhost:8317/path", "http://localhost:8317?token=secret"] {
             XCTAssertThrowsError(try LocalProxyClient(endpoint: endpoint))

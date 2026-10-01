@@ -15,6 +15,16 @@ final class ActiveQuotaTests: XCTestCase {
         let quota = try ActiveQuotaParser.parse(Data(#"{"five_hour":{"utilization":0},"seven_day":{"utilization":0}}"#.utf8), provider: "claude")
         XCTAssertEqual(quota.models.map(\.percentage), [100, 100])
     }
+    func testFreshQuotaDistinguishesCooldownFromDisabledAccount() throws {
+        let quota = try ActiveQuotaParser.parse(Data(#"{"five_hour":{"utilization":100},"seven_day":{"utilization":85}}"#.utf8), provider: "claude")
+        for disabled in [false, true] {
+            var account = try JSONDecoder().decode(ProxyAccount.self, from: Data("{\"name\":\"test\",\"provider\":\"claude\",\"disabled\":\(disabled),\"unavailable\":true}".utf8))
+            account.fetchedQuota = quota
+            let displayed = account.providerQuota()
+            XCTAssertEqual(displayed.isForbidden, disabled)
+            XCTAssertEqual(displayed.models.map(\.percentage), [0, 15])
+        }
+    }
     func testCodexWeeklyPrimaryAndNullSecondary() throws {
         let data = Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":35,"limit_window_seconds":604800,"reset_at":1791180182},"secondary_window":null}}"#.utf8)
         let quota = try ActiveQuotaParser.parse(data, provider: "codex")
