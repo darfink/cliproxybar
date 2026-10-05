@@ -1,14 +1,12 @@
-CLIProxyBar is a standalone macOS menu bar app for local CLIProxyAPI quotas.
+CLIProxyBar 0.1.1 fixes misleading quota warnings in the menu bar:
 
-- Compact and Option-click expanded menus for Claude Code, Codex, and OpenCode Go.
-- Colored quota gauges, fixed-window pace markers, and provider reset information.
-- Usage or remaining display, menu bar provider toggles, and local proxy settings.
-- Management key storage in macOS Keychain.
-- Cached readings at launch and automatic refresh every five minutes.
-- ⌘R to refresh and ⌘, for Settings.
+- Quota cooldowns keep their percentages in the menu bar, including 0% and 100% usage.
+- Disabled accounts use a pause icon instead of an error triangle.
+- Failed refreshes retain cached percentages. Details still show the refresh problem and observation time.
+- README screenshots use sRGB colors and keep email addresses blurred.
 
 Requires macOS 14 or later and a local CLIProxyAPI instance.
 OpenCode Go requires a plugin with native generic quota support.
 
 This ZIP has an ad hoc signature and no Apple notarization.
-After attempting to open the downloaded app, use System Settings → Privacy & Security → Open Anyway if macOS blocks it.
+If macOS blocks the downloaded app, open **System Settings → Privacy & Security**. Then select **Open Anyway**.

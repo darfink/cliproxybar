@@ -25,6 +25,19 @@ final class ActiveQuotaTests: XCTestCase {
             XCTAssertEqual(displayed.models.map(\.percentage), [0, 15])
         }
     }
+    func testFailedRefreshRetainsZeroUsageWithoutDisabledIndicator() throws {
+        var previous = try JSONDecoder().decode(ProxyAccount.self, from: Data(#"{"name":"unused","provider":"claude"}"#.utf8))
+        previous.fetchedQuota = try ActiveQuotaParser.parse(Data(#"{"five_hour":{"utilization":0},"seven_day":{"utilization":0}}"#.utf8), provider: "claude")
+        previous.quotaIssue = LocalClientError.providerHTTP(429).localizedDescription
+        let fresh = try JSONDecoder().decode(ProxyAccount.self, from: Data(#"{"name":"unused","provider":"claude","disabled":false,"unavailable":true}"#.utf8))
+        let account = try XCTUnwrap(QuotaCache.merging([fresh], previous: [previous]).first)
+        let quota = account.providerQuota()
+        XCTAssertFalse(quota.isForbidden)
+        XCTAssertNotNil(account.quotaIssue, "A failed refresh must remain distinguishable from a fresh zero reading.")
+        let pair = try XCTUnwrap(MenuBarQuotaPair.resolve(for: .claude, from: quota.models))
+        XCTAssertEqual(QuotaDisplayMode.used.displayValue(from: pair.top.remainingPercentage), 0)
+        XCTAssertEqual(QuotaDisplayMode.used.displayValue(from: pair.bottom.remainingPercentage), 0)
+    }
     func testCodexWeeklyPrimaryAndNullSecondary() throws {
         let data = Data(#"{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":35,"limit_window_seconds":604800,"reset_at":1791180182},"secondary_window":null}}"#.utf8)
         let quota = try ActiveQuotaParser.parse(data, provider: "codex")
