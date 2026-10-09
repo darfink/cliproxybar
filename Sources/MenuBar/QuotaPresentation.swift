@@ -151,7 +151,8 @@ public extension QuotaMetric {
     }
 
     var displayName: String {
-        switch name {
+        if let label, !label.isEmpty { return label }
+        return switch name {
         case "gemini-3-pro-high", "gemini-3-pro": "Gemini 3 Pro"
         case "gemini-3-flash", "gemini-3-flash-high": "Gemini 3 Flash"
         case "gemini-3-pro-image", "gemini-3-flash-image": "Gemini 3 Image"

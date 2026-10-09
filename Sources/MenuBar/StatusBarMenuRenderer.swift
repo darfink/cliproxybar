@@ -415,19 +415,7 @@ private struct CompactQuotaAccountView: View {
                 Text("No quota data").font(.caption).foregroundStyle(.secondary)
             }
             ForEach(account.quota.models) { metric in
-                HStack(spacing: 8) {
-                    Text(shortLabel(metric)).font(.system(size: 11)).foregroundStyle(.secondary)
-                        .frame(width: 48, alignment: .leading)
-                    PaceGauge(percentage: displayMode.displayValue(from: metric.percentage),
-                              tint: provider.color, pace: pace(for: metric), displayMode: displayMode, trackHeight: 3)
-                    Text(metric.percentage < 0 ? "—" : "\(Int(displayMode.displayValue(from: metric.percentage).rounded()))%")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
-                        .foregroundStyle(provider.color)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .frame(width: 38, alignment: .trailing)
-                }
-                .help(paceTooltip(metric))
+                quotaRow(metric).help(paceTooltip(metric))
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
@@ -435,6 +423,30 @@ private struct CompactQuotaAccountView: View {
         .clipShape(RoundedRectangle(cornerRadius: 7))
         .contentShape(RoundedRectangle(cornerRadius: 7))
         .onHover { isHovered = $0 }
+    }
+
+    private var meterLabelWidth: CGFloat {
+        provider == .claude || provider == .codex || provider == .opencodeGo ? 48 : 70
+    }
+
+    private func quotaRow(_ metric: QuotaMetric) -> some View {
+        HStack(spacing: 8) {
+            Text(shortLabel(metric)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                .frame(width: metric.isStandaloneMetric ? nil : meterLabelWidth, alignment: .leading)
+            if metric.isStandaloneMetric {
+                Spacer()
+                Text(metric.formattedUsage ?? "—").font(.system(size: 11, weight: .semibold)).foregroundStyle(provider.color)
+            } else {
+                PaceGauge(percentage: displayMode.displayValue(from: metric.percentage),
+                          tint: provider.color, pace: pace(for: metric), displayMode: displayMode, trackHeight: 3)
+                Text(metric.percentage < 0 ? "—" : "\(Int(displayMode.displayValue(from: metric.percentage).rounded()))%")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
+                    .foregroundStyle(provider.color)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(width: 38, alignment: .trailing)
+            }
+        }
     }
 
     private func pace(for metric: QuotaMetric) -> QuotaPace? {
@@ -865,49 +877,6 @@ private struct MenuAccountCardView: View {
         provider == .antigravity && !data.models.isEmpty
     }
     
-    private var antigravityGroups: [AntigravityDisplayGroup] {
-        guard isAntigravity else { return [] }
-        let summaryModels = data.models.filter { $0.name.hasPrefix("antigravity-") }
-        if !summaryModels.isEmpty {
-            return summaryModels
-                .map { AntigravityDisplayGroup(name: $0.displayName, percentage: $0.percentage, resetTime: $0.resetTime) }
-        }
-
-        var groups: [AntigravityDisplayGroup] = []
-
-        let gemini3ProModels = data.models.filter {
-            $0.name.contains("gemini-3-pro") && !$0.name.contains("image")
-        }
-        if !gemini3ProModels.isEmpty {
-            let aggregatedPercent = settings.aggregateModelPercentages(gemini3ProModels.map(\.percentage))
-            let minModel = gemini3ProModels.min(by: { $0.percentage < $1.percentage })
-            groups.append(AntigravityDisplayGroup(name: "Gemini 3 Pro", percentage: aggregatedPercent, resetTime: minModel?.resetTime))
-        }
-
-        let gemini3FlashModels = data.models.filter { $0.name.contains("gemini-3-flash") }
-        if !gemini3FlashModels.isEmpty {
-            let aggregatedPercent = settings.aggregateModelPercentages(gemini3FlashModels.map(\.percentage))
-            let minModel = gemini3FlashModels.min(by: { $0.percentage < $1.percentage })
-            groups.append(AntigravityDisplayGroup(name: "Gemini 3 Flash", percentage: aggregatedPercent, resetTime: minModel?.resetTime))
-        }
-
-        let geminiImageModels = data.models.filter { $0.name.contains("image") }
-        if !geminiImageModels.isEmpty {
-            let aggregatedPercent = settings.aggregateModelPercentages(geminiImageModels.map(\.percentage))
-            let minModel = geminiImageModels.min(by: { $0.percentage < $1.percentage })
-            groups.append(AntigravityDisplayGroup(name: "Gemini 3 Image", percentage: aggregatedPercent, resetTime: minModel?.resetTime))
-        }
-
-        let claudeModels = data.models.filter { $0.name.contains("claude") }
-        if !claudeModels.isEmpty {
-            let aggregatedPercent = settings.aggregateModelPercentages(claudeModels.map(\.percentage))
-            let minModel = claudeModels.min(by: { $0.percentage < $1.percentage })
-            groups.append(AntigravityDisplayGroup(name: "Claude 4.5", percentage: aggregatedPercent, resetTime: minModel?.resetTime))
-        }
-
-        return groups.sorted { $0.percentage < $1.percentage }
-    }
-    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             headerSection
@@ -1011,33 +980,30 @@ private struct MenuAccountCardView: View {
     
     private var quotaContentSection: some View {
         let isCardStyle = displayStyle == .card
+        let usesPaceRows = provider == .claude || provider == .codex || provider == .opencodeGo || provider == .antigravity || data.models.contains(where: { $0.name.hasPrefix("plugin:") })
         let models: [ModelBadgeData] = {
-            if isAntigravity {
-                return antigravityGroups.map { ModelBadgeData(name: $0.name, percentage: $0.percentage, resetTime: $0.resetTime) }
-            } else {
-                let meterModels = data.models.filter { !$0.isStandaloneMetric }.map {
-                    ModelBadgeData(name: $0.displayName, percentage: $0.percentage, resetTime: $0.resetTime)
-                }
-                guard isCardStyle else { return meterModels }
-                let standaloneModels = data.models.filter(\.isStandaloneMetric).map {
-                    ModelBadgeData(name: $0.displayName, percentage: $0.percentage, resetTime: $0.resetTime, usage: $0.formattedUsage)
-                }
-                return meterModels + standaloneModels
+            let meterModels = data.models.filter { !$0.isStandaloneMetric }.map {
+                ModelBadgeData(name: $0.displayName, percentage: $0.percentage, resetTime: $0.resetTime)
             }
+            guard isCardStyle else { return meterModels }
+            let standaloneModels = data.models.filter(\.isStandaloneMetric).map {
+                ModelBadgeData(name: $0.displayName, percentage: $0.percentage, resetTime: $0.resetTime, usage: $0.formattedUsage)
+            }
+            return meterModels + standaloneModels
         }()
-        let standaloneModels = isAntigravity || isCardStyle ? [] : data.models.filter(\.isStandaloneMetric)
+        let standaloneModels = usesPaceRows || !isCardStyle ? data.models.filter(\.isStandaloneMetric) : []
         let factorySections = provider == .factoryDroid
             ? FactoryDroidQuotaSection.sections(from: data.models.filter { !$0.isStandaloneMetric })
             : []
         
         return VStack(spacing: 8) {
-            if models.isEmpty && standaloneModels.isEmpty {
+            if data.models.isEmpty {
                 Text("dashboard.noQuotaData".localized())
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 8)
-            } else if provider == .claude || provider == .codex || provider == .opencodeGo {
+            } else if usesPaceRows {
                 ForEach(data.models.filter { !$0.isStandaloneMetric }) { metric in
                     PaceQuotaRow(metric: metric, provider: provider, displayMode: settings.quotaDisplayMode,
                                  observedAt: data.lastUpdated, hasRefreshIssue: refreshIssue != nil)
@@ -2398,6 +2364,7 @@ private extension QuotaProvider {
         case .warp: return "Warp"
         case .opencodeGo: return "OpenCode Go"
         case .clinePass: return "ClinePass"
+        default: return displayName
         }
     }
 }

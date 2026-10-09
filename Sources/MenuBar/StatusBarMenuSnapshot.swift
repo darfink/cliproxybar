@@ -18,6 +18,21 @@ struct StatusBarMenuProviderSnapshot: Equatable, Sendable {
     let accounts: [StatusBarMenuAccountSnapshot]
     let isRefreshing: Bool
     let supportsScopedRefresh: Bool
+
+    @MainActor
+    static func grouping(_ accounts: [ProxyAccount], refreshing: Bool,
+                         usage: (ProxyAccount) -> ProxyUsageSnapshot? = { _ in nil }) -> [Self] {
+        let groups = Dictionary(grouping: accounts.filter { QuotaProvider(rawValue: $0.provider) != nil },
+                                by: { QuotaProvider(rawValue: $0.provider)! })
+        return groups.keys.sorted { $0.rawValue < $1.rawValue }.map { provider in
+            Self(provider: provider, accounts: (groups[provider] ?? []).map { account in
+                StatusBarMenuAccountSnapshot(id: QuotaAccountID(provider: provider, accountKey: account.name),
+                    email: account.displayName, quota: account.providerQuota(), subscription: nil,
+                    isActiveInIDE: false, isRefreshing: refreshing, isRefreshBlocked: refreshing,
+                    refreshIssue: account.quotaIssue, proxyUsage: usage(account))
+            }, isRefreshing: refreshing, supportsScopedRefresh: true)
+        }
+    }
 }
 
 struct StatusBarMenuDisplaySettings: Equatable, Sendable {

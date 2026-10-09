@@ -16,9 +16,14 @@ struct MenuBarApp {
             Task {
                 do {
                     let accounts = try await client.fetch()
-                    for account in accounts {
-                        let quota = try await client.fetchQuota(for: account)
-                        print("\(account.provider): \(quota.models.map { "\($0.name)=\(Int($0.percentage))% remaining" }.joined(separator: ", "))")
+                    let plugins = try await client.fetchQuotaProviders()
+                    for account in accounts where account.disabled != true {
+                        guard ActiveQuotaParser.supports(account, pluginProviders: plugins) else {
+                            print("\(account.provider): no quota API; usage history remains available")
+                            continue
+                        }
+                        let quota = try await client.fetchQuota(for: account, pluginProviders: plugins)
+                        print("\(account.provider): \(quota.models.filter { $0.percentage >= 0 }.map { "\($0.name)=\(Int($0.percentage))% remaining" }.joined(separator: ", "))")
                     }
                     print("Connected: \(accounts.count) accounts")
                     exit(0)
@@ -53,6 +58,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     var refreshing = false
     var message = "Connecting to CLIProxyAPI…"
     var selected: QuotaProvider?
+    var pluginProviders: Set<String> = []
     var pollTask: Task<Void, Never>?
     var resetRefreshTask: Task<Void, Never>?
     var resetMonitor: QuotaResetMonitor
@@ -66,6 +72,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         super.init()
         do {
             accounts = try cache.load()
+            preferences.updateAvailableProviders(accounts)
             cachedOnLaunch = accounts.count
         } catch { message = "Saved readings could not be loaded. Fetching fresh quotas…" }
     }
@@ -174,6 +181,8 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         resetMonitor = QuotaResetMonitor(endpoint: newClient.baseURL.absoluteString)
         try? resetMonitor.load()
         accounts = (try? cache.load()) ?? []
+        pluginProviders = []
+        preferences.updateAvailableProviders(accounts)
         selected = nil
         connected = false
         refreshing = false
@@ -192,17 +201,25 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
             let fresh = try await client.fetch()
             guard generation == endpointGeneration else { return }
             accounts = QuotaCache.merging(fresh, previous: accounts)
+            preferences.updateAvailableProviders(accounts)
             connected = true
             render()
+            do {
+                let discovered = try await client.fetchQuotaProviders()
+                guard generation == endpointGeneration else { return }
+                pluginProviders = discovered
+            } catch { /* Keep the previous discovery while direct adapters continue. */ }
+            guard generation == endpointGeneration else { return }
+            let pluginProviders = self.pluginProviders
             var resetEvents: [QuotaResetEvent] = []
             let targets = accounts.filter {
-                ActiveQuotaParser.supports($0.provider) && $0.disabled != true &&
-                (provider == nil || $0.provider == provider) && (accountName == nil || $0.name == accountName)
+                ActiveQuotaParser.supports($0, pluginProviders: pluginProviders) && $0.disabled != true &&
+                (provider == nil || QuotaProvider(rawValue: $0.provider) == QuotaProvider(rawValue: provider!)) && (accountName == nil || $0.name == accountName)
             }
             await withTaskGroup(of: (String, ProviderQuota?, String?).self) { group in
                 for account in targets {
                     group.addTask { [client] in
-                        do { return (account.name, try await client.fetchQuota(for: account), nil) }
+                        do { return (account.name, try await client.fetchQuota(for: account, pluginProviders: pluginProviders), nil) }
                         catch {
                             let issue = error is LocalClientError ? error.localizedDescription : "Quota request failed. Previous readings are retained."
                             return (account.name, nil, issue)
@@ -256,7 +273,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
                 print("\(account.provider): metrics=\(account.providerQuota().models.count), refresh=\(account.quotaIssue == nil ? "ok" : "failed")")
             }
             print("Cached accounts on launch: \(cachedOnLaunch)")
-            let refreshed = accounts.filter { ActiveQuotaParser.supports($0.provider) && $0.disabled != true }
+            let refreshed = accounts.filter { ActiveQuotaParser.supports($0, pluginProviders: pluginProviders) && $0.disabled != true }
             exit(connected && !compact.items.isEmpty && compactHeight < expandedHeight && refreshed.allSatisfy { $0.quotaIssue == nil && !$0.providerQuota().models.isEmpty } ? 0 : 1)
         }
     }
@@ -275,20 +292,15 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         }
     }
     func snapshot() -> StatusBarMenuSnapshot {
-        let groups = Dictionary(grouping: accounts.filter { QuotaProvider(rawValue: $0.provider) != nil }, by: { QuotaProvider(rawValue: $0.provider)! })
-        let providers = groups.keys.sorted { $0.rawValue < $1.rawValue }.map { provider in
-            StatusBarMenuProviderSnapshot(provider: provider, accounts: (groups[provider] ?? []).map { account in
-                StatusBarMenuAccountSnapshot(id: QuotaAccountID(provider: provider, accountKey: account.name), email: account.displayName, quota: account.providerQuota(), subscription: nil, isActiveInIDE: false, isRefreshing: refreshing, isRefreshBlocked: refreshing, refreshIssue: account.quotaIssue, proxyUsage: usageCollector.snapshot(for: account))
-            }, isRefreshing: refreshing, supportsScopedRefresh: true)
-        }
+        let providers = StatusBarMenuProviderSnapshot.grouping(accounts, refreshing: refreshing) { usageCollector.snapshot(for: $0) }
         return StatusBarMenuSnapshot(connectionMessage: message, isLocalProxyMode: client.isLoopback, proxyPort: UInt16(client.baseURL.port ?? client.defaultPort), isProxyRunning: connected, tunnel: CloudflareTunnelSnapshot(), providers: providers, selectedProvider: selected, isLoadingQuotas: refreshing, displaySettings: StatusBarMenuDisplaySettings(quotaDisplayMode: preferences.mode, quotaDisplayStyle: .lowestBar, hideSensitiveInfo: false, modelAggregationMode: .lowest), appearanceMode: .system, language: .english, proxyAddress: client.displayAddress)
     }
     func render() {
-        let hasReadings = accounts.contains { !$0.providerQuota().models.isEmpty }
+        let hasReadings = accounts.contains { $0.providerQuota().models.contains { $0.percentage >= 0 } }
         let items = accounts.compactMap { account -> MenuBarQuotaDisplayItem? in
             guard let provider = QuotaProvider(rawValue: account.provider), preferences.showsInMenuBar(provider) else { return nil }
             let quota = account.providerQuota()
-            return MenuBarQuotaDisplayItem(id: account.name, providerSymbol: provider.menuBarSymbol, accountShort: "", percentage: quota.models.map(\.percentage).min() ?? -1, provider: provider, isForbidden: quota.isForbidden, quotaPair: MenuBarQuotaPair.resolve(for: provider, from: quota.models))
+            return MenuBarQuotaDisplayItem(id: account.name, providerSymbol: provider.menuBarSymbol, accountShort: "", percentage: quota.models.map(\.percentage).filter { $0 >= 0 }.min() ?? -1, provider: provider, isForbidden: quota.isForbidden, quotaPair: MenuBarQuotaPair.resolve(for: provider, from: quota.models))
         }
         statusBar.updateStatusBar(items: items, colorMode: .monochrome, quotaDisplayMode: preferences.mode, isRunning: connected || hasReadings, showMenuBarIcon: true, showQuota: hasReadings, appearanceMode: .system, language: .english, isRefreshing: refreshing)
         statusBar.rebuildMenuInPlace()

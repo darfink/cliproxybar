@@ -26,6 +26,8 @@ struct ProxyAccount: Decodable, Sendable {
     var quotaIssue: String? = nil
     var success: Int64? = nil
     var failed: Int64? = nil
+    var supports_quota: Bool? = nil
+    var project_id: String? = nil
 
     static func observationDate(_ raw: String?) -> Date {
         guard let raw else { return .distantPast }
@@ -114,6 +116,8 @@ enum ManagementKey {
 
 struct LocalProxyClient: Sendable {
     let baseURL: URL
+    var managementKey: @Sendable () throws -> String = { try ManagementKey.read() }
+    var transport: (@Sendable (URLRequest) async throws -> (Data, URLResponse))? = nil
     var defaultPort: Int { baseURL.scheme == "https" ? 443 : 80 }
     var isLoopback: Bool { ["127.0.0.1", "localhost", "[::1]"].contains(baseURL.host?.lowercased() ?? "") }
     var displayAddress: String {
@@ -140,29 +144,56 @@ struct LocalProxyClient: Sendable {
         return try JSONDecoder().decode([ProxyUsageEvent].self, from: data)
     }
 
-    func fetchQuota(for account: ProxyAccount) async throws -> ProviderQuota {
-        if account.provider == "opencode-go" {
+    func fetchQuotaProviders() async throws -> Set<String> {
+        do { return try PluginQuotaParser.providers(await send(path: "quota/providers")) }
+        catch LocalClientError.http(let status) where status == 404 || status == 501 { return [] }
+    }
+
+    func fetchQuota(for account: ProxyAccount, pluginProviders: Set<String> = []) async throws -> ProviderQuota {
+        if account.provider == "opencode-go" || account.supports_quota == true || pluginProviders.contains(account.provider) {
             guard let index = account.auth_index, !index.isEmpty else { throw LocalClientError.missingAuthIndex }
             let data = try await send(path: "quota/fetch", body: JSONEncoder().encode(["auth_index": index]))
-            var quota = try ActiveQuotaParser.parsePlugin(data)
+            var quota = try PluginQuotaParser.parse(data, provider: account.provider)
             quota.accountDisplayName = account.displayName
             return quota
         }
-        let call = try ActiveQuotaParser.request(for: account)
+        if account.provider == "antigravity" {
+            // loadCodeAssist supplies the project without exporting OAuth credentials.
+            let subscription = try? await apiCall(ActiveQuotaParser.googleRequest(for: account, operation: "loadCodeAssist", payload: #"{"metadata":{"ideType":"ANTIGRAVITY"}}"#))
+            let metadata = subscription.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let project = metadata?["cloudaicompanionProject"] as? String ?? account.project_id
+            let payload = String(decoding: try JSONEncoder().encode(project.map { ["project": $0] } ?? [:]), as: UTF8.self)
+            var quota: ProviderQuota
+            do {
+                quota = try GoogleQuotaParser.summary(await apiCall(ActiveQuotaParser.googleRequest(for: account, operation: "retrieveUserQuotaSummary", payload: payload)))
+            } catch LocalClientError.providerHTTP(let status) where status == 404 || status == 501 {
+                quota = try GoogleQuotaParser.models(await apiCall(ActiveQuotaParser.googleRequest(for: account, operation: "fetchAvailableModels", payload: payload)))
+            } catch LocalClientError.noQuotaData {
+                quota = try GoogleQuotaParser.models(await apiCall(ActiveQuotaParser.googleRequest(for: account, operation: "fetchAvailableModels", payload: payload)))
+            }
+            quota.planType = (metadata?["paidTier"] as? [String: Any])?["name"] as? String ?? (metadata?["currentTier"] as? [String: Any])?["name"] as? String
+            quota.accountDisplayName = account.displayName
+            return quota
+        }
+        let body = try await apiCall(ActiveQuotaParser.request(for: account))
+        var quota = try ActiveQuotaParser.parse(body, provider: account.provider)
+        quota.accountDisplayName = account.displayName
+        return quota
+    }
+
+    private func apiCall(_ call: ProxyAPICall) async throws -> Data {
         let data = try await send(path: "api-call", body: JSONEncoder().encode(call))
         let result = try JSONDecoder().decode(ProxyAPICallResult.self, from: data)
         guard (200...299).contains(result.statusCode) else { throw LocalClientError.providerHTTP(result.statusCode) }
         guard let body = result.body?.data(using: .utf8) else { throw LocalClientError.noQuotaData }
-        var quota = try ActiveQuotaParser.parse(body, provider: account.provider)
-        quota.accountDisplayName = account.displayName
-        return quota
+        return body
     }
 
     private func send(path: String, body: Data? = nil, method: String = "POST", query: [URLQueryItem] = []) async throws -> Data {
         var components = URLComponents(url: baseURL.appendingPathComponent("v0/management/" + path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query }
         var request = URLRequest(url: components.url!)
-        request.setValue("Bearer " + (try ManagementKey.read()), forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer " + (try managementKey()), forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 20
         if let body {
             request.httpMethod = method
@@ -174,7 +205,9 @@ struct LocalProxyClient: Sendable {
         configuration.timeoutIntervalForResource = 25
         let session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
         defer { session.invalidateAndCancel() }
-        let (data, response) = try await session.data(for: request)
+        let (data, response): (Data, URLResponse)
+        if let transport { (data, response) = try await transport(request) }
+        else { (data, response) = try await session.data(for: request) }
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw LocalClientError.http((response as? HTTPURLResponse)?.statusCode ?? 0) }
         return data
     }

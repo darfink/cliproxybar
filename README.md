@@ -59,6 +59,8 @@ Light and dark images follow your color preference.
 | Claude Code | Five-hour session, weekly | Plan label when CLIProxyAPI supplies it |
 | Codex | Session, weekly | Plan label and available resets when the provider supplies them |
 | OpenCode Go | Rolling, weekly, monthly | Plan label through the generic plugin quota API |
+| Antigravity | Provider quota groups or per-model limits | Project and plan lookup; response fixtures tested |
+| Generic quota plugins | Windows supplied by the plugin | Separate groups, reset times, plan labels, numeric summaries |
 
 OpenCode Go requires CLIProxyAPI v8 and a plugin that implements the generic quota capability.
 The companion [OpenCode Go plugin](https://github.com/massiveits/opencode-go-cliproxyapi) needs the native quota changes in [upstream pull request #10](https://github.com/massiveits/opencode-go-cliproxyapi/pull/10).
@@ -66,7 +68,21 @@ A plugin version that exposes only its separate quota page does not work with th
 
 Pace compares used quota with elapsed time in a fixed window. It is an estimate, not a provider guarantee.
 OpenCode Go weekly quotas have pace indicators. Its rolling and monthly responses do not supply enough window metadata for pace calculations.
-Unsupported providers can appear as accounts without active quota readings.
+Every configured provider can appear in the menu and the optional usage history.
+Settings includes detected providers, so you can choose their menu bar indicators.
+Providers without an allowance API show no quota data. Unknown quota does not mean zero usage.
+
+CLIProxyAPI also routes Gemini, Vertex AI, AI Studio, Kimi, Grok, Devin, Meta and compatible API endpoints.
+Additional providers depend on the installed plugins and CLIProxyAPI version.
+Routing support alone does not establish an API for subscription quotas.
+CLIProxyBar discovers plugin capabilities through `GET /v0/management/quota/providers` and account `supports_quota` flags.
+It reads normalized quotas through `POST /v0/management/quota/fetch`.
+Plugins that implement these endpoints require no separate app adapter.
+
+New integrations use response fixtures and request tests without provider credentials.
+Claude, Codex and OpenCode Go also have live account checks.
+Antigravity and other plugins still need live validation by someone with an account.
+The app keeps provider credentials inside CLIProxyAPI through its token substitution API.
 
 ## Requirements
 

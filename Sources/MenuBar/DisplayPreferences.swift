@@ -22,6 +22,13 @@ final class DisplayPreferences {
     @ObservationIgnored var onResetAlertsChange: (() -> Void)?
     private(set) var endpoint: String
     private(set) var hiddenMenuBarProviders: Set<String>
+    private(set) var availableProviders: [QuotaProvider] = QuotaProvider.allCases.filter { ActiveQuotaParser.supports($0.rawValue) }
+
+    func updateAvailableProviders(_ accounts: [ProxyAccount]) {
+        let configured = accounts.compactMap { QuotaProvider(rawValue: $0.provider) }
+        let builtIn = QuotaProvider.allCases.filter { ActiveQuotaParser.supports($0.rawValue) }
+        availableProviders = Set(configured + builtIn).sorted { $0.displayName < $1.displayName }
+    }
 
     func showsInMenuBar(_ provider: QuotaProvider) -> Bool {
         !hiddenMenuBarProviders.contains(provider.rawValue)

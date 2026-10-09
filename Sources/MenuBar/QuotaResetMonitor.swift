@@ -6,21 +6,37 @@ enum QuotaResetKind: String, Codable, Sendable {
 
     static func classify(_ name: String) -> Self? {
         switch name {
-        case "five-hour-session", "codex-session", "opencode-go-rolling": .short
+        case "five-hour-session", "codex-session", "opencode-go-rolling": return .short
         case "seven-day-weekly", "seven-day-sonnet", "seven-day-opus", "codex-weekly",
-             "opencode-go-weekly", "opencode-go-monthly": .long
-        default: nil
+             "opencode-go-weekly", "opencode-go-monthly": return .long
+        default:
+            if name.hasPrefix("antigravity-") {
+                if name.hasSuffix("-session") { return .short }
+                if name.hasSuffix("-weekly") { return .long }
+            }
+            if name.hasPrefix("plugin:"), let window = name.split(separator: ":").last {
+                switch window {
+                case "rolling", "five-hour", "five-hour-session", "5h": return .short
+                case "weekly", "monthly": return .long
+                default: break
+                }
+            }
+            return nil
         }
     }
 
     static func label(_ name: String) -> String {
         switch name {
-        case "five-hour-session", "codex-session": "Session"
-        case "opencode-go-rolling": "Rolling"
-        case "opencode-go-monthly": "Monthly"
-        case "seven-day-sonnet": "Weekly (Sonnet)"
-        case "seven-day-opus": "Weekly (Opus)"
-        default: "Weekly"
+        case "five-hour-session", "codex-session": return "Session"
+        case "opencode-go-rolling": return "Rolling"
+        case "opencode-go-monthly": return "Monthly"
+        case "seven-day-sonnet": return "Weekly (Sonnet)"
+        case "seven-day-opus": return "Weekly (Opus)"
+        default:
+            if name.hasPrefix("plugin:"), let window = name.split(separator: ":").last {
+                return window == "rolling" ? "Rolling" : window == "monthly" ? "Monthly" : window == "weekly" ? "Weekly" : "Session"
+            }
+            return name.hasSuffix("-session") ? "Session" : "Weekly"
         }
     }
 }
@@ -97,7 +113,7 @@ struct QuotaResetMonitor {
             var handled = previous?.handledReset
             if let previous, previous.plan == plan {
                 var confirmed: Date?
-                if metric.name == "opencode-go-rolling" {
+                if metric.name == "opencode-go-rolling" || (metric.name.hasPrefix("plugin:") && metric.name.hasSuffix(":rolling")) {
                     // A rolling reset date can move as requests expire. Wait for
                     // a full refill rather than treating each increase as a reset.
                     if previous.remaining < 99.5, metric.percentage >= 99.5,

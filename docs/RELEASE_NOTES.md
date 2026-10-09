@@ -1,7 +1,12 @@
-CLIProxyBar 0.3.3 fixes a crash in quota reset notifications:
+CLIProxyBar 0.4.0 adds provider discovery and broader quota support:
 
-- The app could quit when macOS returned notification settings on a background queue. This affected reset alerts and opening Settings.
-- Notification callbacks now handle background replies safely. Settings, reset detection, and alert preferences remain available after the update.
+- Every configured provider can appear in the menu and optional usage history. Settings includes detected providers for menu bar indicators.
+- Plugins with the generic quota capability share one adapter. It preserves quota groups, unfamiliar windows, reset times, plan labels, and numeric summaries.
+- Antigravity has a direct adapter for quota summaries, with older per-model responses as a fallback.
+- Unknown allowances stay unknown. Numeric summaries do not affect percentage gauges.
+
+The new integrations use response fixtures and request tests. Antigravity and additional plugins still need live account validation.
+Claude, Codex and OpenCode Go have live account checks. The notification crash fix from 0.3.3 remains included.
 
 Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in updater.
 

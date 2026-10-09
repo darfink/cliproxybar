@@ -23,6 +23,11 @@ public extension QuotaProvider {
         case .glm: "Z.ai"
         case .warp: "Warp"
         case .clinePass: "ClinePass"
+        case .gemini: "Gemini CLI"
+        case .kimi: "Kimi"
+        case .meta: "Meta"
+        case .aistudio: "AI Studio"
+        default: rawValue.split(whereSeparator: { $0 == "-" || $0 == "_" }).map { $0.capitalized }.joined(separator: " ")
         }
     }
 
@@ -47,6 +52,10 @@ public extension QuotaProvider {
         case .glm: "brain"
         case .warp: "terminal.fill"
         case .clinePass: "cpu"
+        case .gemini, .aistudio: "sparkles"
+        case .kimi: "moon"
+        case .meta: "infinity"
+        default: "puzzlepiece.extension"
         }
     }
 
@@ -71,6 +80,7 @@ public extension QuotaProvider {
         case .glm: "glm"
         case .warp: "warp"
         case .clinePass: "clinepass"
+        default: rawValue
         }
     }
 
@@ -95,6 +105,9 @@ public extension QuotaProvider {
         case .glm: Color(hex: "3B82F6") ?? .blue
         case .warp: Color(hex: "01E5FF") ?? .cyan
         case .clinePass: Color(hex: "61A3FA") ?? .blue
+        case .gemini, .aistudio, .meta: Color(hex: "4285F4") ?? .blue
+        case .kimi: Color(hex: "6366F1") ?? .indigo
+        default: .teal
         }
     }
 
@@ -131,6 +144,11 @@ public extension QuotaProvider {
         case .glm: "G"
         case .warp: "W"
         case .clinePass: "CL"
+        case .gemini: "GM"
+        case .kimi: "KM"
+        case .meta: "M"
+        case .aistudio: "AI"
+        default: String(rawValue.prefix(2)).uppercased()
         }
     }
 
@@ -152,6 +170,7 @@ public extension QuotaProvider {
         case .warp: "warp-menubar"
         case .clinePass: "clinepass-menubar"
         case .factoryDroid, .devin, .grok, .openRouter: nil
+        default: nil
         }
     }
 }

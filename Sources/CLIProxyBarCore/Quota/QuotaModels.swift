@@ -1,25 +1,56 @@
 import Foundation
 
-public enum QuotaProvider: String, CaseIterable, Codable, Identifiable, Sendable {
-    case claude
-    case codex
-    case opencodeGo = "opencode-go"
-    case qwen
-    case iflow
-    case antigravity
-    case vertex
-    case kiro
-    case copilot = "github-copilot"
-    case cursor
-    case factoryDroid = "factory-droid"
-    case devin
-    case grok
-    case openRouter = "openrouter"
-    case amp
-    case trae
-    case glm
-    case warp
-    case clinePass = "clinepass"
+public struct QuotaProvider: RawRepresentable, Hashable, CaseIterable, Codable, Identifiable, Sendable {
+    public let rawValue: String
+    public init?(rawValue: String) {
+        let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !value.isEmpty else { return nil }
+        self.rawValue = switch value {
+        case "copilot": "github-copilot"
+        case "xai": "grok"
+        case "kimi-ai", "kimi.ai", "kimi.com": "kimi"
+        case "gemini-cli": "gemini"
+        default: value
+        }
+    }
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        guard let provider = Self(rawValue: value) else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Empty provider ID")
+        }
+        self = provider
+    }
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+    public static let claude = Self(rawValue: "claude")!
+    public static let codex = Self(rawValue: "codex")!
+    public static let opencodeGo = Self(rawValue: "opencode-go")!
+    public static let gemini = Self(rawValue: "gemini")!
+    public static let kimi = Self(rawValue: "kimi")!
+    public static let meta = Self(rawValue: "meta")!
+    public static let aistudio = Self(rawValue: "aistudio")!
+    public static let qwen = Self(rawValue: "qwen")!
+    public static let iflow = Self(rawValue: "iflow")!
+    public static let antigravity = Self(rawValue: "antigravity")!
+    public static let vertex = Self(rawValue: "vertex")!
+    public static let kiro = Self(rawValue: "kiro")!
+    public static let copilot = Self(rawValue: "github-copilot")!
+    public static let cursor = Self(rawValue: "cursor")!
+    public static let factoryDroid = Self(rawValue: "factory-droid")!
+    public static let devin = Self(rawValue: "devin")!
+    public static let grok = Self(rawValue: "grok")!
+    public static let openRouter = Self(rawValue: "openrouter")!
+    public static let amp = Self(rawValue: "amp")!
+    public static let trae = Self(rawValue: "trae")!
+    public static let glm = Self(rawValue: "glm")!
+    public static let warp = Self(rawValue: "warp")!
+    public static let clinePass = Self(rawValue: "clinepass")!
+    public static let allCases: [Self] = [claude, codex, opencodeGo, gemini, antigravity, vertex,
+        kimi, grok, meta, aistudio, qwen, iflow, kiro, copilot, cursor, factoryDroid,
+        devin, openRouter, amp, trae, glm, warp, clinePass]
 
     public var id: String { rawValue }
 
@@ -122,6 +153,7 @@ public struct QuotaMetric: Codable, Equatable, Identifiable, Sendable {
     public var remaining: Int?
     public var tooltip: String?
     public var windowDuration: TimeInterval?
+    public var label: String?
 
     public var id: String { name }
     public var usedPercentage: Double { 100 - percentage }
@@ -135,7 +167,8 @@ public struct QuotaMetric: Codable, Equatable, Identifiable, Sendable {
         limit: Int? = nil,
         remaining: Int? = nil,
         tooltip: String? = nil,
-        windowDuration: TimeInterval? = nil
+        windowDuration: TimeInterval? = nil,
+        label: String? = nil
     ) {
         self.name = name
         self.percentage = percentage
@@ -146,6 +179,7 @@ public struct QuotaMetric: Codable, Equatable, Identifiable, Sendable {
         self.remaining = remaining
         self.tooltip = tooltip
         self.windowDuration = windowDuration
+        self.label = label
     }
 }
 

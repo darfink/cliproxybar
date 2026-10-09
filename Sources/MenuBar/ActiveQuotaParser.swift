@@ -4,7 +4,16 @@ import CLIProxyBarCore
 
 /// Uses CLIProxyAPI's credential substitution; no provider token leaves the proxy.
 enum ActiveQuotaParser {
-    static func supports(_ provider: String) -> Bool { ["claude", "codex", "opencode-go"].contains(provider) }
+    static func supports(_ provider: String) -> Bool { ["claude", "codex", "opencode-go", "antigravity"].contains(provider) }
+    static func supports(_ account: ProxyAccount, pluginProviders: Set<String>) -> Bool {
+        supports(account.provider) || account.supports_quota == true || pluginProviders.contains(account.provider)
+    }
+
+    static func googleRequest(for account: ProxyAccount, operation: String, payload: String) throws -> ProxyAPICall {
+        guard let index = account.auth_index, !index.isEmpty else { throw LocalClientError.missingAuthIndex }
+        return ProxyAPICall(authIndex: index, method: "POST", url: "https://cloudcode-pa.googleapis.com/v1internal:" + operation,
+            header: ["Authorization": "Bearer $TOKEN$", "Content-Type": "application/json", "User-Agent": "antigravity/1.11.3 Darwin/arm64"], data: payload)
+    }
 
     static func request(for account: ProxyAccount) throws -> ProxyAPICall {
         guard let index = account.auth_index, !index.isEmpty else { throw LocalClientError.missingAuthIndex }
@@ -54,27 +63,7 @@ enum ActiveQuotaParser {
         return ProviderQuota(models: models, lastUpdated: now, planType: json["plan_type"] as? String, availableResetCredits: resetCount)
     }
     static func parsePlugin(_ data: Data, now: Date = Date()) throws -> ProviderQuota {
-        struct Response: Decodable {
-            struct Subscription: Decodable { let plan: String? }
-            struct Group: Decodable {
-                struct Bucket: Decodable { let window: String?; let remainingFraction: Double?; let resetTime: String? }
-                let buckets: [Bucket]?
-            }
-            let subscription: Subscription?
-            let groups: [Group]?
-        }
-        let response = try JSONDecoder().decode(Response.self, from: data)
-        var models: [QuotaMetric] = []
-        for bucket in (response.groups ?? []).flatMap({ $0.buckets ?? [] }) {
-            guard let window = bucket.window, ["rolling", "weekly", "monthly"].contains(window),
-                  let remaining = bucket.remainingFraction, remaining.isFinite, (0...1).contains(remaining),
-                  !models.contains(where: { $0.name == "opencode-go-" + window }) else { continue }
-            // The API does not state the rolling or monthly window duration.
-            models.append(QuotaMetric(name: "opencode-go-" + window, percentage: remaining * 100,
-                                      resetTime: bucket.resetTime ?? "", windowDuration: window == "weekly" ? 604800 : nil))
-        }
-        guard !models.isEmpty else { throw LocalClientError.noQuotaData }
-        return ProviderQuota(models: models, lastUpdated: now, planType: response.subscription?.plan)
+        try PluginQuotaParser.parse(data, provider: "opencode-go", now: now)
     }
 
     private static func availableResets(_ raw: Any?) -> Int? {
