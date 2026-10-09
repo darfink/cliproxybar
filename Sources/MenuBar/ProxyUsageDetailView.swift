@@ -13,7 +13,10 @@ struct ProxyUsageSummary {
         self.today = today
         yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
         let start = calendar.date(byAdding: .day, value: -29, to: today)!
-        days = usage.days.filter { $0.date >= start && $0.date <= today }
+        days = usage.days.filter {
+            let date = calendar.startOfDay(for: $0.date)
+            return date >= start && date <= today
+        }
     }
 
     var tokens: ProxyUsageTokens {

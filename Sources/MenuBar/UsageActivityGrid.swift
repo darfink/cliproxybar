@@ -149,7 +149,7 @@ struct ProxyUsageActivityGrid: View {
                 }
             }
             HStack(spacing: 10) {
-                legend("Today", fill: tint.opacity(0.46), today: true)
+                legend("Today", fill: .clear, today: true)
                 legend("Upcoming", fill: .clear, border: .secondary.opacity(0.25), dashed: true)
                 legend("No history", fill: .secondary.opacity(0.05))
                 Spacer(minLength: 0)
@@ -185,8 +185,11 @@ struct ProxyUsageActivityGrid: View {
                     style: StrokeStyle(lineWidth: selected ? 1 : 0.7, dash: status == .upcoming && !selected ? [2, 2] : []))
             }
             .frame(width: cellSize, height: cellSize)
-            .overlay(alignment: .bottom) {
-                if today { UsageTodayMarker().offset(y: 3) }
+            .overlay {
+                if today {
+                    UsageTodayRing(tint: tint, lowActivity: status != .recorded
+                        || scale.level(for: data.days[date].map { measure.value(for: $0) } ?? 0) <= 1)
+                }
             }
             .help(date.formatted(date: .complete, time: .omitted) + ": " + data.detail(on: date))
             .accessibilityLabel((today ? "Today, " : "") + date.formatted(date: .complete, time: .omitted))
@@ -208,17 +211,28 @@ struct ProxyUsageActivityGrid: View {
             RoundedRectangle(cornerRadius: 2).fill(fill)
                 .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(border, style: StrokeStyle(lineWidth: 1, dash: dashed ? [2, 2] : [])))
                 .frame(width: 9, height: 9)
-                .overlay(alignment: .bottom) {
-                    if today { UsageTodayMarker().offset(y: 3) }
+                .overlay {
+                    if today { UsageTodayRing(tint: tint, lowActivity: true, inset: 1.5, lineWidth: 0.75) }
                 }
             Text(text).foregroundStyle(.secondary)
         }
     }
 }
 
-private struct UsageTodayMarker: View {
+private struct UsageTodayRing: View {
+    let tint: Color
+    var lowActivity = false
+    var inset: CGFloat = 2
+    var lineWidth: CGFloat = 1
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
-        Capsule().fill(Color.primary.opacity(0.65)).frame(width: 5, height: 1.5)
+        RoundedRectangle(cornerRadius: 1.5)
+            .strokeBorder(colorScheme == .light && lowActivity ? tint.opacity(0.65)
+                          : Color.white.opacity(colorScheme == .dark ? 0.65 : 0.8),
+                          lineWidth: lineWidth)
+            .padding(inset)
+            .allowsHitTesting(false)
     }
 }
 

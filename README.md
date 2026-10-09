@@ -156,7 +156,8 @@ The panel shows recorded token or request totals for today, yesterday, and the l
 It includes input, output, cache, and reasoning counters, an activity grid, and totals by model.
 The panel aligns with the hovered account and stays within the screen.
 Each activity square represents one day. Month and weekday labels orient the 26-week grid.
-Today has a small marker beneath its square. Upcoming days have dashed outlines, and days before collection have a faint fill.
+Today has a thin ring inside its square. Upcoming days have dashed outlines, and days before collection have a faint fill.
+The Today legend is hollow. Square colors show the recorded activity level.
 Choose **Tokens** or **Requests** to change period totals, daily activity, and model totals.
 The model list sorts by the selected measure. The token breakdown stays visible in both modes.
 Four color levels separate quiet and busy days within the visible history.

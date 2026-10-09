@@ -1,10 +1,10 @@
-CLIProxyBar 0.2.5 simplifies the usage card:
+CLIProxyBar 0.2.6 refines the daily activity indicator:
 
-- The card starts with Today, Yesterday, and Last 30 days. The title, account email, and request-counter header are removed.
-- **Tokens** and **Requests** change period totals, daily activity colors, and model totals.
-- The model list sorts by the selected measure. The token breakdown stays visible in both modes.
-- A small marker beneath the square identifies today. Its full color shows the activity level.
-- The card keeps the same height when you switch measures. Clicks keep the menu open.
+- A thin ring inside the square identifies today.
+- The Today legend is hollow. It identifies the current day without suggesting an activity level.
+- Today's square keeps its recorded activity color, including zero usage.
+- The ring adapts to light and dark mode and stays visible on pale squares.
+- Usage totals use local calendar days consistently with the activity grid.
 
 Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in updater.
 

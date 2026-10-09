@@ -62,6 +62,22 @@ final class UsagePresentationTests: XCTestCase {
         XCTAssertEqual(UsageActivityMeasure.tokens.value(for: tokens[0].1), 900_000)
     }
 
+    func testPeriodTotalsMatchGridWhenStoredDayStartsInAnotherTimezone() throws {
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 9, hour: 12)))
+        let today = calendar.startOfDay(for: now)
+        // Midnight UTC is 02:00 in Stockholm on this date.
+        var day = ProxyUsageDay(date: calendar.date(byAdding: .hour, value: 2, to: today)!, requests: 1)
+        day.tokens.total = 140
+        let usage = ProxyUsageSnapshot(days: [day], startedAt: now)
+        let summary = ProxyUsageSummary(usage: usage, now: now, calendar: calendar)
+        let grid = UsageActivityCalendar(days: usage.days, startedAt: usage.startedAt, now: now, calendar: calendar)
+        XCTAssertEqual(grid.detail(on: grid.today), "140 tokens · 1 requests")
+        XCTAssertEqual(summary.value(on: summary.today, measure: .tokens), 140)
+        XCTAssertEqual(summary.value(on: summary.today, measure: .requests), 1)
+        XCTAssertEqual(summary.value(measure: .tokens), 140)
+        XCTAssertEqual(summary.tokens.total, 140)
+    }
+
     func testActivitySeparatesTodayFutureZeroAndUnrecordedDays() throws {
         let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 9, hour: 12)))
         let start = try XCTUnwrap(calendar.date(byAdding: .day, value: -2, to: now))
