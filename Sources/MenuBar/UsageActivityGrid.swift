@@ -8,6 +8,10 @@ enum UsageActivityMeasure: String, CaseIterable {
     func value(for day: ProxyUsageDay) -> Int64 {
         self == .tokens ? day.tokens.total : day.requests
     }
+
+    func value(for model: ProxyUsageModelTotals) -> Int64 {
+        self == .tokens ? model.tokens.total : model.requests
+    }
 }
 
 struct UsageActivityScale {
@@ -83,11 +87,11 @@ struct ProxyUsageActivityGrid: View {
     let days: [ProxyUsageDay]
     let startedAt: Date?
     let tint: Color
+    @Binding var measure: UsageActivityMeasure
     var interactive = true
     var now = Date()
     var calendar = Calendar.current
     @State private var hoveredDate: Date?
-    @State private var measure = UsageActivityMeasure.tokens
     private let cellSize: CGFloat = 14
     private let spacing: CGFloat = 3
     private let labelWidth: CGFloat = 28
@@ -145,7 +149,7 @@ struct ProxyUsageActivityGrid: View {
                 }
             }
             HStack(spacing: 10) {
-                legend("Today", fill: tint.opacity(0.12), border: tint)
+                legend("Today", fill: tint.opacity(0.46), today: true)
                 legend("Upcoming", fill: .clear, border: .secondary.opacity(0.25), dashed: true)
                 legend("No history", fill: .secondary.opacity(0.05))
                 Spacer(minLength: 0)
@@ -175,13 +179,15 @@ struct ProxyUsageActivityGrid: View {
         let selected = date == hoveredDate
         return RoundedRectangle(cornerRadius: 3)
             .fill(cellColor(data.days[date], status: status, scale: scale))
-            .padding(today || selected ? 2 : 0)
             .overlay {
                 RoundedRectangle(cornerRadius: 3).strokeBorder(
-                    selected || today ? tint : status == .upcoming ? Color.secondary.opacity(0.25) : .clear,
-                    style: StrokeStyle(lineWidth: selected || today ? 1.5 : 0.7, dash: status == .upcoming && !selected ? [2, 2] : []))
+                    selected ? Color.primary.opacity(0.55) : status == .upcoming ? Color.secondary.opacity(0.25) : .clear,
+                    style: StrokeStyle(lineWidth: selected ? 1 : 0.7, dash: status == .upcoming && !selected ? [2, 2] : []))
             }
             .frame(width: cellSize, height: cellSize)
+            .overlay(alignment: .bottom) {
+                if today { UsageTodayMarker().offset(y: 3) }
+            }
             .help(date.formatted(date: .complete, time: .omitted) + ": " + data.detail(on: date))
             .accessibilityLabel((today ? "Today, " : "") + date.formatted(date: .complete, time: .omitted))
             .accessibilityValue(data.detail(on: date))
@@ -197,13 +203,22 @@ struct ProxyUsageActivityGrid: View {
         }
     }
 
-    private func legend(_ text: String, fill: Color, border: Color = .clear, dashed: Bool = false) -> some View {
+    private func legend(_ text: String, fill: Color, border: Color = .clear, dashed: Bool = false, today: Bool = false) -> some View {
         HStack(spacing: 4) {
             RoundedRectangle(cornerRadius: 2).fill(fill)
                 .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(border, style: StrokeStyle(lineWidth: 1, dash: dashed ? [2, 2] : [])))
                 .frame(width: 9, height: 9)
+                .overlay(alignment: .bottom) {
+                    if today { UsageTodayMarker().offset(y: 3) }
+                }
             Text(text).foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct UsageTodayMarker: View {
+    var body: some View {
+        Capsule().fill(Color.primary.opacity(0.65)).frame(width: 5, height: 1.5)
     }
 }
 
@@ -222,13 +237,13 @@ struct UsageActivityMeasurePicker: View {
                                     in: RoundedRectangle(cornerRadius: 4))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Color activity by " + option.rawValue.lowercased())
+                .accessibilityLabel("Show " + option.rawValue.lowercased())
                 .accessibilityAddTraits(measure == option ? .isSelected : [])
             }
         }
         .padding(2)
         .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
-        .help("One square is one day. Darker shades mean more " + measure.rawValue.lowercased() + ". Hover for exact totals.")
+        .help("Show " + measure.rawValue.lowercased() + " in period totals, daily activity, and models. One square is one day. Hover for exact totals.")
     }
 }
 

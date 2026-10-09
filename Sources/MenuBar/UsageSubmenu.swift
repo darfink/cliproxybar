@@ -37,8 +37,9 @@ final class UsageSubmenu: NSMenu, NSMenuDelegate {
         showsStateColumn = false
         delegate = self
 
-        let detail = ProxyUsageDetailView(usage: usage, provider: provider, accountName: accountName)
+        let detail = ProxyUsageDetailView(usage: usage, provider: provider)
             .frame(width: 520).environment(\.locale, locale)
+            .accessibilityLabel(accountName + " usage")
         let hosting = NSHostingView(rootView: detail)
         hosting.appearance = appearance
         hosting.setFrameSize(hosting.intrinsicContentSize)

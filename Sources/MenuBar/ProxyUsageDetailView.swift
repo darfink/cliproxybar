@@ -1,20 +1,33 @@
 import SwiftUI
 import CLIProxyBarCore
 
-struct ProxyUsageDetailView: View {
-    let usage: ProxyUsageSnapshot
-    let provider: QuotaProvider
-    let accountName: String
-    var interactive = true
-    private let calendar = Calendar.current
-    private var today: Date { calendar.startOfDay(for: Date()) }
-    private var yesterday: Date { calendar.date(byAdding: .day, value: -1, to: today)! }
-    private var monthStart: Date { calendar.date(byAdding: .day, value: -29, to: today)! }
-    private var recentDays: [ProxyUsageDay] { usage.days.filter { $0.date >= monthStart } }
-    private var monthTokens: ProxyUsageTokens { usage.totals(since: monthStart) }
-    private var models: [(String, ProxyUsageModelTotals)] {
+struct ProxyUsageSummary {
+    let today: Date
+    let yesterday: Date
+    let days: [ProxyUsageDay]
+    let calendar: Calendar
+
+    init(usage: ProxyUsageSnapshot, now: Date = Date(), calendar: Calendar = .current) {
+        self.calendar = calendar
+        let today = calendar.startOfDay(for: now)
+        self.today = today
+        yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let start = calendar.date(byAdding: .day, value: -29, to: today)!
+        days = usage.days.filter { $0.date >= start && $0.date <= today }
+    }
+
+    var tokens: ProxyUsageTokens {
+        days.reduce(into: ProxyUsageTokens()) { $0.add($1.tokens) }
+    }
+
+    func value(on date: Date? = nil, measure: UsageActivityMeasure) -> Int64 {
+        days.filter { day in date.map { calendar.isDate(day.date, inSameDayAs: $0) } ?? true }
+            .reduce(0) { ProxyUsageTokens.sum($0, measure.value(for: $1)) }
+    }
+
+    func models(measure: UsageActivityMeasure) -> [(String, ProxyUsageModelTotals)] {
         var totals: [String: ProxyUsageModelTotals] = [:]
-        for day in recentDays {
+        for day in days {
             for (name, model) in day.models {
                 var total = totals[name] ?? ProxyUsageModelTotals()
                 total.requests = ProxyUsageTokens.sum(total.requests, model.requests)
@@ -23,42 +36,56 @@ struct ProxyUsageDetailView: View {
             }
         }
         return totals.sorted {
-            $0.value.tokens.total == $1.value.tokens.total ? $0.key < $1.key : $0.value.tokens.total > $1.value.tokens.total
+            let left = measure.value(for: $0.value)
+            let right = measure.value(for: $1.value)
+            return left == right ? $0.key < $1.key : left > right
         }
+    }
+}
+
+struct ProxyUsageDetailView: View {
+    let usage: ProxyUsageSnapshot
+    let provider: QuotaProvider
+    let interactive: Bool
+    let now: Date
+    let calendar: Calendar
+    @State private var measure: UsageActivityMeasure
+
+    init(usage: ProxyUsageSnapshot, provider: QuotaProvider, interactive: Bool = true,
+         now: Date = Date(), calendar: Calendar = .current, initialMeasure: UsageActivityMeasure = .tokens) {
+        self.usage = usage
+        self.provider = provider
+        self.interactive = interactive
+        self.now = now
+        self.calendar = calendar
+        _measure = State(initialValue: initialMeasure)
     }
 
     var body: some View {
+        let summary = ProxyUsageSummary(usage: usage, now: now, calendar: calendar)
+        let monthTokens = summary.tokens
+        let models = summary.models(measure: measure)
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 7) {
-                ProviderIconMono(provider: provider, size: 15, tint: provider.color)
-                Text("Usage").font(.system(size: 14, weight: .bold)).foregroundStyle(provider.color)
-                Spacer()
-                if let success = usage.successCount {
-                    Text("\(compact(success)) successful").foregroundStyle(.secondary)
-                        .help("Current request counter reported by CLIProxyAPI. It can reset when the proxy restarts.")
-                }
-                if let failed = usage.failedCount, failed > 0 {
-                    Text("\(compact(failed)) failed").foregroundStyle(.secondary)
-                }
-            }.font(.system(size: 10))
-            Text(accountName).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-
             HStack(spacing: 0) {
-                metric("Today", value: compact(usage.days.first { calendar.isDate($0.date, inSameDayAs: today) }?.tokens.total ?? 0))
+                metric("Today", value: compact(summary.value(on: summary.today, measure: measure)))
                 Divider().frame(height: 34)
-                metric("Yesterday", value: compact(usage.days.first { calendar.isDate($0.date, inSameDayAs: yesterday) }?.tokens.total ?? 0),
-                       available: usage.startedAt.map { calendar.startOfDay(for: $0) <= yesterday } ?? false)
+                metric("Yesterday", value: compact(summary.value(on: summary.yesterday, measure: measure)),
+                       available: usage.startedAt.map { calendar.startOfDay(for: $0) <= summary.yesterday } ?? false)
                 Divider().frame(height: 34)
-                metric("Last 30 days", value: compact(monthTokens.total))
+                metric("Last 30 days", value: compact(summary.value(measure: measure)))
             }
             .padding(.vertical, 10)
             .background(provider.color.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityValue(measure.rawValue)
 
-            HStack(spacing: 0) {
-                metric("Input", value: compact(monthTokens.input), small: true)
-                metric("Output", value: compact(monthTokens.output), small: true)
-                metric("Cache reads", value: compact(monthTokens.cached), small: true)
-                metric("Reasoning", value: compact(monthTokens.reasoning), small: true)
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Tokens · last 30 days").font(.system(size: 10)).foregroundStyle(.secondary)
+                HStack(spacing: 0) {
+                    metric("Input", value: compact(monthTokens.input), small: true)
+                    metric("Output", value: compact(monthTokens.output), small: true)
+                    metric("Cache reads", value: compact(monthTokens.cached), small: true)
+                    metric("Reasoning", value: compact(monthTokens.reasoning), small: true)
+                }
             }
             .help("Token breakdown for the last 30 days. Cache and reasoning counts are subsets where the provider reports them. They are not added to the total again.")
             if monthTokens.cacheWrite > 0 {
@@ -71,21 +98,21 @@ struct ProxyUsageDetailView: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
 
-            ProxyUsageActivityGrid(days: usage.days, startedAt: usage.startedAt, tint: provider.color, interactive: interactive)
+            ProxyUsageActivityGrid(days: usage.days, startedAt: usage.startedAt, tint: provider.color,
+                measure: $measure, interactive: interactive, now: now, calendar: calendar)
 
             if !models.isEmpty {
                 HStack {
                     Text("Models · last 30 days").font(.system(size: 11, weight: .semibold))
                     Spacer()
-                    Text("Tokens / requests").font(.system(size: 10)).foregroundStyle(.tertiary)
+                    Text(measure.rawValue).font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 VStack(spacing: 6) {
                     ForEach(Array(models.prefix(4)), id: \.0) { name, total in
                         HStack(spacing: 10) {
                             Text(name).lineLimit(1).truncationMode(.middle)
                             Spacer(minLength: 4)
-                            Text(compact(total.tokens.total)).monospacedDigit().foregroundStyle(provider.color)
-                            Text("/ \(compact(total.requests))").monospacedDigit().foregroundStyle(.secondary)
+                            Text(compact(measure.value(for: total))).monospacedDigit().foregroundStyle(provider.color)
                         }.font(.system(size: 11))
                     }
                 }
@@ -118,7 +145,8 @@ struct ProxyUsageDetailView: View {
             Text(usage.startedAt == nil || !available ? "—" : value)
                 .font(.system(size: small ? 14 : 19, weight: .semibold, design: .rounded)).monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.7)
-            Text(title).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+            Text(small ? title : title + " · " + measure.rawValue.lowercased())
+                .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
         }.frame(maxWidth: .infinity)
     }
 

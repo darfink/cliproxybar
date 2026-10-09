@@ -142,7 +142,7 @@ final class ProxyUsageTests: XCTestCase {
             existing.submenu = submenu
             renderer.transferFilterScope(from: anchor, to: existing)
             XCTAssertTrue(submenu.anchorItem === existing)
-            let view = NSHostingView(rootView: ProxyUsageDetailView(usage: usage, provider: .codex, accountName: "example@example.com").frame(width: 520))
+            let view = NSHostingView(rootView: ProxyUsageDetailView(usage: usage, provider: .codex).frame(width: 520))
             view.setFrameSize(view.intrinsicContentSize)
             XCTAssertEqual(view.frame.width, 520)
             XCTAssertGreaterThan(view.frame.height, 250)
@@ -150,7 +150,7 @@ final class ProxyUsageTests: XCTestCase {
         }
         // Optional developer preview uses fixture data only, never live identities.
         if let path = ProcessInfo.processInfo.environment["CLIPROXYBAR_USAGE_PREVIEW"] {
-            let renderer = ImageRenderer(content: ProxyUsageDetailView(usage: usage, provider: .codex, accountName: "example@example.com", interactive: false)
+            let renderer = ImageRenderer(content: ProxyUsageDetailView(usage: usage, provider: .codex, interactive: false)
                 .frame(width: 520).background(Color(nsColor: .windowBackgroundColor)).environment(\.colorScheme, .dark))
             renderer.scale = 2
             let image = try XCTUnwrap(renderer.cgImage)

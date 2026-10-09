@@ -30,6 +30,38 @@ final class UsagePresentationTests: XCTestCase {
         return calendar
     }
 
+    func testMeasureChangesPeriodTotalsAndModelRankingWithinThirtyCalendarDays() throws {
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 9, hour: 12)))
+        let today = calendar.startOfDay(for: now)
+        func day(_ offset: Int, requests: Int64, tokens: Int64, model: String) -> ProxyUsageDay {
+            var day = ProxyUsageDay(date: calendar.date(byAdding: .day, value: offset, to: today)!, requests: requests)
+            day.tokens.total = tokens
+            day.models[model] = ProxyUsageModelTotals(requests: requests, tokens: day.tokens)
+            return day
+        }
+        let usage = ProxyUsageSnapshot(days: [
+            day(0, requests: 2, tokens: 900_000, model: "Long context"),
+            day(-1, requests: 80, tokens: 40_000, model: "Short requests"),
+            day(-29, requests: 20, tokens: 10_000, model: "Short requests"),
+            day(-30, requests: 500, tokens: 9_000_000, model: "Outside the period"),
+            day(1, requests: 500, tokens: 9_000_000, model: "Future"),
+        ], startedAt: today)
+        let summary = ProxyUsageSummary(usage: usage, now: now, calendar: calendar)
+        XCTAssertEqual(summary.value(on: summary.today, measure: .tokens), 900_000)
+        XCTAssertEqual(summary.value(on: summary.today, measure: .requests), 2)
+        XCTAssertEqual(summary.value(on: summary.yesterday, measure: .tokens), 40_000)
+        XCTAssertEqual(summary.value(on: summary.yesterday, measure: .requests), 80)
+        XCTAssertEqual(summary.value(measure: .tokens), 950_000)
+        XCTAssertEqual(summary.value(measure: .requests), 102)
+        XCTAssertEqual(summary.tokens.total, 950_000)
+        let tokens = summary.models(measure: .tokens)
+        let requests = summary.models(measure: .requests)
+        XCTAssertEqual(tokens.map(\.0), ["Long context", "Short requests"])
+        XCTAssertEqual(requests.map(\.0), ["Short requests", "Long context"])
+        XCTAssertEqual(UsageActivityMeasure.requests.value(for: requests[0].1), 100)
+        XCTAssertEqual(UsageActivityMeasure.tokens.value(for: tokens[0].1), 900_000)
+    }
+
     func testActivitySeparatesTodayFutureZeroAndUnrecordedDays() throws {
         let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 9, hour: 12)))
         let start = try XCTUnwrap(calendar.date(byAdding: .day, value: -2, to: now))

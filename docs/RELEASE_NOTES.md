@@ -1,10 +1,10 @@
-CLIProxyBar 0.2.4 makes installation and updates easier:
+CLIProxyBar 0.2.5 simplifies the usage card:
 
-- Install with the Homebrew command in the README. The tap lives in the app repository.
-- Sparkle checks GitHub Releases for updates and verifies signatures before installation.
-- **Settings → App updates** includes a manual check and options for automatic checks and installation.
-- Automatic checks are enabled by default. Automatic installation is disabled by default.
-- Each release updates the Homebrew cask's version and checksum automatically.
+- The card starts with Today, Yesterday, and Last 30 days. The title, account email, and request-counter header are removed.
+- **Tokens** and **Requests** change period totals, daily activity colors, and model totals.
+- The model list sorts by the selected measure. The token breakdown stays visible in both modes.
+- A small marker beneath the square identifies today. Its full color shows the activity level.
+- The card keeps the same height when you switch measures. Clicks keep the menu open.
 
 Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in updater.
 

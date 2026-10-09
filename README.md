@@ -152,12 +152,13 @@ You can also enable the setting directly in your CLIProxyAPI configuration:
 usage-statistics-enabled: true
 ```
 
-The panel shows recorded token totals for today, yesterday, and the last 30 days.
+The panel shows recorded token or request totals for today, yesterday, and the last 30 days.
 It includes input, output, cache, and reasoning counters, an activity grid, and totals by model.
 The panel aligns with the hovered account and stays within the screen.
 Each activity square represents one day. Month and weekday labels orient the 26-week grid.
-Today has a colored border. Upcoming days have dashed outlines, and days before collection have a faint fill.
-Choose **Tokens** or **Requests** to compare daily activity.
+Today has a small marker beneath its square. Upcoming days have dashed outlines, and days before collection have a faint fill.
+Choose **Tokens** or **Requests** to change period totals, daily activity, and model totals.
+The model list sorts by the selected measure. The token breakdown stays visible in both modes.
 Four color levels separate quiet and busy days within the visible history.
 Hover over a square to see its date, recorded tokens, requests, and failures.
 Available token fields depend on the provider. Request counters come from CLIProxyAPI.
