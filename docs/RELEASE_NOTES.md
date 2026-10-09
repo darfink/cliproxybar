@@ -1,10 +1,12 @@
-CLIProxyBar 0.2.6 refines the daily activity indicator:
+CLIProxyBar 0.3.0 adds configurable quota reset alerts:
 
-- A thin ring inside the square identifies today.
-- The Today legend is hollow. It identifies the current day without suggesting an activity level.
-- Today's square keeps its recorded activity color, including zero usage.
-- The ring adapts to light and dark mode and stays visible on pale squares.
-- Usage totals use local calendar days consistently with the activity grid.
+- Settings has separate notifications for session/rolling resets and weekly/monthly resets.
+- Weekly and monthly resets can play a short confetti animation, independently of notifications. A Preview button shows the effect.
+- All options are off by default. macOS requests notification permission when you enable an alert.
+- Fresh provider readings confirm scheduled resets. Rolling alerts wait for the allowance to become fully available again.
+- Confirmed resets are remembered across launches. Limits that reset together produce one notification per account and one confetti animation.
+- Confetti respects Reduce Motion, stays transparent, and does not intercept clicks or keyboard focus.
+- CLIProxyBar refreshes at known reset times as well as during regular polling. The app must be running and connected.
 
 Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in updater.
 

@@ -19,6 +19,7 @@ final class DisplayPreferences {
     @ObservationIgnored var onChange: (() -> Void)?
     @ObservationIgnored var onEndpointChange: (() -> Void)?
     @ObservationIgnored var onUsageTrackingChange: (() -> Void)?
+    @ObservationIgnored var onResetAlertsChange: (() -> Void)?
     private(set) var endpoint: String
     private(set) var hiddenMenuBarProviders: Set<String>
 
@@ -57,11 +58,35 @@ final class DisplayPreferences {
             onUsageTrackingChange?()
         }
     }
+    var notifiesShortResets: Bool {
+        didSet {
+            guard oldValue != notifiesShortResets else { return }
+            defaults.set(notifiesShortResets, forKey: "notifiesShortResets")
+            onResetAlertsChange?()
+        }
+    }
+    var notifiesLongResets: Bool {
+        didSet {
+            guard oldValue != notifiesLongResets else { return }
+            defaults.set(notifiesLongResets, forKey: "notifiesLongResets")
+            onResetAlertsChange?()
+        }
+    }
+    var celebratesLongResets: Bool {
+        didSet {
+            guard oldValue != celebratesLongResets else { return }
+            defaults.set(celebratesLongResets, forKey: "celebratesLongResets")
+            onResetAlertsChange?()
+        }
+    }
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         hiddenMenuBarProviders = Set(defaults.stringArray(forKey: "hiddenMenuBarProviders") ?? [])
         endpoint = defaults.string(forKey: "endpoint") ?? "http://127.0.0.1:8317"
         mode = defaults.string(forKey: "quotaDisplayMode").flatMap(QuotaDisplayMode.init(rawValue:)) ?? .used
         tracksProxyUsage = defaults.bool(forKey: "tracksProxyUsage")
+        notifiesShortResets = defaults.bool(forKey: "notifiesShortResets")
+        notifiesLongResets = defaults.bool(forKey: "notifiesLongResets")
+        celebratesLongResets = defaults.bool(forKey: "celebratesLongResets")
     }
 }

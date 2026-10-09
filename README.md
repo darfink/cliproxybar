@@ -49,6 +49,7 @@ Light and dark images follow your color preference.
 - Cached readings at launch, followed by fresh provider requests.
 - Account hover panels with optional token history, model totals, and daily activity.
 - One refresh action, a refresh indicator inside the menu, and the ⌘R shortcut.
+- Optional quota reset notifications and confetti for weekly or monthly resets.
 - Local or remote proxy URL and management key settings, available with ⌘,.
 
 ## Supported quotas
@@ -132,12 +133,29 @@ Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in up
 | Click the menu bar item | Open the compact menu |
 | Option-click the menu bar item | Open the expanded menu |
 | ⌘R or Refresh | Fetch quotas for all supported accounts |
-| ⌘, or Settings | Change the display, visible providers, proxy URL, or management key |
+| ⌘, or Settings | Change the display, visible providers, reset alerts, usage collection, proxy URL, or management key |
 | Hover over an account | Show usage and token history |
 | Open Management | Open your proxy's management page in the browser |
 
 Automatic refresh runs every five minutes. A failed request retains the previous reading and shows its status.
 The browser management page handles its own authentication. CLIProxyBar does not put the management key in browser URLs.
+
+## Quota reset alerts
+
+Settings includes three independent options. All are off by default:
+
+- **Notify for session and rolling resets** covers session limits, including five-hour windows, and OpenCode Go rolling quota.
+- **Notify for weekly and monthly resets** covers longer quota windows.
+- **Celebrate weekly and monthly resets** plays a short confetti animation. **Preview** shows the effect without enabling it.
+
+macOS asks for notification permission when you enable an alert. Confetti works independently of notifications.
+It passes clicks through, keeps keyboard focus unchanged, and respects macOS Reduce Motion.
+Fresh provider readings confirm scheduled resets. Rolling alerts wait for the allowance to become fully available again.
+First readings establish a baseline. Failed requests and expired countdowns alone do not trigger alerts.
+Reset history prevents duplicate alerts after relaunch. Limits that reset together produce one notification per account and one confetti animation.
+The app must be running and connected. It refreshes at known reset times and checks again during regular polling.
+After sleep, recent resets can be confirmed: up to 15 minutes for sessions and 24 hours for weekly or monthly windows.
+Rolling recovery requires readings no more than 15 minutes apart. Timed alerts require the provider to report a reset time.
 
 ## Usage history
 
@@ -184,6 +202,8 @@ The quota cache contains account display names, quota values, and timestamps. It
 The cache lives at `~/Library/Application Support/CLIProxyBar/quota-cache.json`, with owner-only permissions.
 Optional usage history lives in the same directory, in a separate file for each proxy URL.
 It stores daily counters, model names, and hashed account identifiers. It excludes raw events, keys, headers, and response bodies.
+Reset history also lives in this directory, in a separate file for each proxy URL.
+It stores hashed identifiers, quota percentages, plan labels, and timestamps. It excludes account names, emails, and credentials.
 The app includes no telemetry. Sparkle contacts GitHub to check for app updates and download them.
 Update checks do not send your proxy URL, management key, account names, or usage history.
 

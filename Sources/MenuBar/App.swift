@@ -40,7 +40,8 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     let statusBar = StatusBarManager()
     let preferences = DisplayPreferences()
     let updater = AppUpdater()
-    lazy var settingsWindow = SettingsWindow(preferences: preferences, updater: updater, onKeySaved: { [weak self] in
+    let resetAlerts = QuotaResetAlerts()
+    lazy var settingsWindow = SettingsWindow(preferences: preferences, updater: updater, resetAlerts: resetAlerts, onKeySaved: { [weak self] in
         self?.applyEndpoint()
     })
     var commands: StatusBarCommandDispatcher!
@@ -53,10 +54,14 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     var message = "Connecting to CLIProxyAPI…"
     var selected: QuotaProvider?
     var pollTask: Task<Void, Never>?
+    var resetRefreshTask: Task<Void, Never>?
+    var resetMonitor: QuotaResetMonitor
     var usageCollector: ProxyUsageCollector
     init(client: LocalProxyClient) {
         self.client = client
         cache = QuotaCache(endpoint: client.baseURL.absoluteString)
+        resetMonitor = QuotaResetMonitor(endpoint: client.baseURL.absoluteString)
+        try? resetMonitor.load()
         usageCollector = ProxyUsageCollector(client: client)
         super.init()
         do {
@@ -79,6 +84,11 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         preferences.onChange = { [weak self] in self?.render() }
         preferences.onEndpointChange = { [weak self] in self?.applyEndpoint() }
         preferences.onUsageTrackingChange = { [weak self] in self?.applyUsageTracking() }
+        preferences.onResetAlertsChange = { [weak self] in
+            guard let self else { return }
+            Task { await self.resetAlerts.updateAuthorization(requestIfNeeded:
+                self.preferences.notifiesShortResets || self.preferences.notifiesLongResets) }
+        }
         usageCollector.onChange = { [weak self] in self?.statusBar.invalidateMenuContent() }
         commands = StatusBarCommandDispatcher(handlers: StatusBarCommandHandlers(
             refreshAll: { [weak self] in await self?.refresh() },
@@ -129,6 +139,8 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     }
     func applicationWillTerminate(_ notification: Notification) {
         pollTask?.cancel()
+        resetRefreshTask?.cancel()
+        resetAlerts.stop()
         usageCollector.stop()
     }
 
@@ -140,12 +152,15 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     private func applyEndpoint() {
         guard let newClient = try? LocalProxyClient(endpoint: preferences.endpoint) else { return }
         endpointGeneration += 1
+        resetRefreshTask?.cancel()
         client = newClient
         usageCollector.stop()
         usageCollector = ProxyUsageCollector(client: newClient)
         usageCollector.onChange = { [weak self] in self?.statusBar.invalidateMenuContent() }
         applyUsageTracking()
         cache = QuotaCache(endpoint: newClient.baseURL.absoluteString)
+        resetMonitor = QuotaResetMonitor(endpoint: newClient.baseURL.absoluteString)
+        try? resetMonitor.load()
         accounts = (try? cache.load()) ?? []
         selected = nil
         connected = false
@@ -167,6 +182,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
             accounts = QuotaCache.merging(fresh, previous: accounts)
             connected = true
             render()
+            var resetEvents: [QuotaResetEvent] = []
             let targets = accounts.filter {
                 ActiveQuotaParser.supports($0.provider) && $0.disabled != true &&
                 (provider == nil || $0.provider == provider) && (accountName == nil || $0.name == accountName)
@@ -184,7 +200,12 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
                 for await (name, quota, issue) in group {
                     guard generation == endpointGeneration else { group.cancelAll(); return }
                     guard let index = accounts.firstIndex(where: { $0.name == name }) else { continue }
-                    if let quota { accounts[index].fetchedQuota = quota }
+                    if let quota {
+                        accounts[index].fetchedQuota = quota
+                        if !CommandLine.arguments.contains("--smoke-test") {
+                            resetEvents += resetMonitor.observe(account: accounts[index], quota: quota)
+                        }
+                    }
                     accounts[index].quotaIssue = issue
                     render()
                 }
@@ -195,6 +216,12 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
             message += failures == 0 ? "\nQuotas fetched directly from providers." : "\nSome quota requests failed. Previous readings are retained."
             do { try cache.save(accounts) }
             catch { message += "\nCould not save readings for the next launch." }
+            if !CommandLine.arguments.contains("--smoke-test") {
+                do {
+                    try resetMonitor.save()
+                    await resetAlerts.deliver(resetEvents, preferences: preferences)
+                } catch { message += "\nCould not save reset history. Reset alerts are paused for this refresh." }
+            }
         } catch {
             guard generation == endpointGeneration else { return }
             connected = false
@@ -202,8 +229,10 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
             if !accounts.isEmpty { message += "\nShowing previous readings." }
             for index in accounts.indices { accounts[index].quotaIssue = "Proxy unavailable · previous reading" }
         }
+        guard generation == endpointGeneration else { return }
         refreshing = false
         render()
+        if !CommandLine.arguments.contains("--smoke-test") { scheduleResetRefresh() }
         if CommandLine.arguments.contains("--smoke-test") {
             let compact = StatusBarMenuRenderer(snapshot: snapshot(), commands: commands).buildMenu()
             let expanded = StatusBarMenuRenderer(snapshot: snapshot(), commands: commands, expanded: true).buildMenu()
@@ -217,6 +246,20 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
             print("Cached accounts on launch: \(cachedOnLaunch)")
             let refreshed = accounts.filter { ActiveQuotaParser.supports($0.provider) && $0.disabled != true }
             exit(connected && !compact.items.isEmpty && compactHeight < expandedHeight && refreshed.allSatisfy { $0.quotaIssue == nil && !$0.providerQuota().models.isEmpty } ? 0 : 1)
+        }
+    }
+    private func scheduleResetRefresh() {
+        resetRefreshTask?.cancel()
+        let now = Date()
+        let next = accounts.filter { $0.disabled != true }.flatMap { $0.providerQuota().models }
+            .filter { QuotaResetKind.classify($0.name) != nil }
+            .map { ProxyAccount.observationDate($0.resetTime) }.filter { $0 > now }.min()
+        guard let next else { resetRefreshTask = nil; return }
+        resetRefreshTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(next.timeIntervalSince(now) + 2)) }
+            catch { return }
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
         }
     }
     func snapshot() -> StatusBarMenuSnapshot {

@@ -7,10 +7,12 @@ final class SettingsWindow {
     private var window: NSWindow?
     private let preferences: DisplayPreferences
     private let updater: AppUpdater
+    private let resetAlerts: QuotaResetAlerts
     private let onKeySaved: () -> Void
-    init(preferences: DisplayPreferences, updater: AppUpdater, onKeySaved: @escaping () -> Void) {
+    init(preferences: DisplayPreferences, updater: AppUpdater, resetAlerts: QuotaResetAlerts, onKeySaved: @escaping () -> Void) {
         self.preferences = preferences
         self.updater = updater
+        self.resetAlerts = resetAlerts
         self.onKeySaved = onKeySaved
     }
 
@@ -19,7 +21,8 @@ final class SettingsWindow {
             let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 610), styleMask: [.titled, .closable], backing: .buffered, defer: false)
             panel.title = "CLIProxyBar Settings"
             panel.isReleasedWhenClosed = false
-            panel.contentView = NSHostingView(rootView: DisplaySettingsView(preferences: preferences, updater: updater, onKeySaved: onKeySaved, close: { [weak panel] in panel?.close() }))
+            panel.contentView = NSHostingView(rootView: DisplaySettingsView(preferences: preferences, updater: updater,
+                resetAlerts: resetAlerts, onKeySaved: onKeySaved, close: { [weak panel] in panel?.close() }))
             panel.center()
             window = panel
         }
@@ -31,6 +34,7 @@ final class SettingsWindow {
 private struct DisplaySettingsView: View {
     @Bindable var preferences: DisplayPreferences
     @Bindable var updater: AppUpdater
+    @Bindable var resetAlerts: QuotaResetAlerts
     let onKeySaved: () -> Void
     let close: () -> Void
     @State private var endpointDraft = ""
@@ -88,6 +92,25 @@ private struct DisplaySettingsView: View {
                     Text("The dropdown still shows every account. Turn all off for just the app icon.")
                         .font(.caption).foregroundStyle(.secondary)
                     Divider()
+                    Text("Quota reset alerts").font(.headline)
+                    Toggle("Notify for session and rolling resets", isOn: $preferences.notifiesShortResets)
+                        .toggleStyle(.checkbox)
+                    Toggle("Notify for weekly and monthly resets", isOn: $preferences.notifiesLongResets)
+                        .toggleStyle(.checkbox)
+                    HStack {
+                        Toggle("Celebrate weekly and monthly resets", isOn: $preferences.celebratesLongResets)
+                            .toggleStyle(.checkbox)
+                        Spacer(minLength: 8)
+                        Button("Preview", action: resetAlerts.previewConfetti)
+                    }
+                    Text("Alerts follow fresh quota readings. Rolling quota alerts wait until the allowance is fully available again.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Confetti lasts a few seconds, lets clicks pass through, and respects Reduce Motion. All three options are off by default.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if preferences.notifiesShortResets || preferences.notifiesLongResets || resetAlerts.issue != nil {
+                        Text(resetAlerts.statusText).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Divider()
                     Text("Usage history").font(.headline)
                     Toggle("Collect token usage", isOn: $preferences.tracksProxyUsage)
                         .toggleStyle(.checkbox)
@@ -143,6 +166,7 @@ private struct DisplaySettingsView: View {
             }
         }
         .onAppear { endpointDraft = preferences.endpoint }
+        .task { await resetAlerts.updateAuthorization() }
         .padding(20)
         .frame(width: 440, height: 610)
     }
