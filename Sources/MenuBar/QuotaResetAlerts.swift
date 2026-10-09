@@ -3,6 +3,33 @@ import Observation
 import UserNotifications
 import CLIProxyBarCore
 
+/// Older SDKs do not annotate notification callbacks as Sendable. Build the
+/// replies outside the main actor so the service can call them on its own queue.
+enum NotificationCallbackBridge {
+    nonisolated static func value<Input, Output: Sendable>(
+        _ continuation: CheckedContinuation<Output, Never>,
+        transform: @escaping @Sendable (Input) -> Output
+    ) -> @Sendable (Input) -> Void {
+        { input in continuation.resume(returning: transform(input)) }
+    }
+
+    nonisolated static func completion(
+        _ continuation: CheckedContinuation<Void, any Error>
+    ) -> @Sendable ((any Error)?) -> Void {
+        { error in
+            if let error { continuation.resume(throwing: error) }
+            else { continuation.resume() }
+        }
+    }
+
+    nonisolated static func authorization(
+        _ continuation: CheckedContinuation<Void, any Error>
+    ) -> @Sendable (Bool, (any Error)?) -> Void {
+        let reply = completion(continuation)
+        return { _, error in reply(error) }
+    }
+}
+
 @MainActor
 @Observable
 final class QuotaResetAlerts: NSObject, UNUserNotificationCenterDelegate {
@@ -43,10 +70,8 @@ final class QuotaResetAlerts: NSObject, UNUserNotificationCenterDelegate {
     private func requestNotificationPermission() async throws {
         guard let center else { return }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-            center.requestAuthorization(options: [.alert, .sound]) { _, error in
-                if let error { continuation.resume(throwing: error) }
-                else { continuation.resume() }
-            }
+            center.requestAuthorization(options: [.alert, .sound],
+                completionHandler: NotificationCallbackBridge.authorization(continuation))
         }
     }
 
@@ -55,9 +80,8 @@ final class QuotaResetAlerts: NSObject, UNUserNotificationCenterDelegate {
         // Older SDKs do not mark UNNotificationSettings as Sendable. Extract
         // the scalar in its callback instead of moving the object across actors.
         let rawValue: Int = await withCheckedContinuation { continuation in
-            center.getNotificationSettings { settings in
-                continuation.resume(returning: settings.authorizationStatus.rawValue)
-            }
+            center.getNotificationSettings(completionHandler: NotificationCallbackBridge.value(continuation,
+                transform: { $0.authorizationStatus.rawValue }))
         }
         return UNAuthorizationStatus(rawValue: rawValue) ?? .notDetermined
     }
@@ -65,10 +89,7 @@ final class QuotaResetAlerts: NSObject, UNUserNotificationCenterDelegate {
     private func enqueueNotification(_ request: UNNotificationRequest) async throws {
         guard let center else { return }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-            center.add(request) { error in
-                if let error { continuation.resume(throwing: error) }
-                else { continuation.resume() }
-            }
+            center.add(request, withCompletionHandler: NotificationCallbackBridge.completion(continuation))
         }
     }
 

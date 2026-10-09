@@ -1,7 +1,7 @@
-CLIProxyBar 0.3.2 makes quota reset notifications more concise:
+CLIProxyBar 0.3.3 fixes a crash in quota reset notifications:
 
-- Notifications hide account names that repeat the provider name. Distinct account names remain visible.
-- Shorter reset messages identify the restored quota window.
+- The app could quit when macOS returned notification settings on a background queue. This affected reset alerts and opening Settings.
+- Notification callbacks now handle background replies safely. Settings, reset detection, and alert preferences remain available after the update.
 
 Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in updater.
 

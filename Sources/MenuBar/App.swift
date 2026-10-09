@@ -70,6 +70,18 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         } catch { message = "Saved readings could not be loaded. Fetching fresh quotas…" }
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if CommandLine.arguments.contains("--smoke-notifications-test") {
+            guard Bundle.main.bundleURL.pathExtension == "app" else {
+                print("Run the notification diagnostic from an app bundle.")
+                exit(1)
+            }
+            Task {
+                for _ in 0..<5 { await resetAlerts.updateAuthorization() }
+                print("Native notification settings read successfully, without requesting permission or delivering alerts.")
+                exit(0)
+            }
+            return
+        }
         if CommandLine.arguments.contains("--smoke-updater-test") {
             guard !updater.automaticallyChecksForUpdates else {
                 print("Pass -SUEnableAutomaticChecks NO for the updater diagnostic.")
