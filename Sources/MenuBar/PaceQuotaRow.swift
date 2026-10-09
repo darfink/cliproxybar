@@ -22,10 +22,12 @@ struct PaceQuotaRow: View {
                 }
             }
             PaceGauge(percentage: percent, tint: provider.color, pace: pace, displayMode: displayMode)
-            if let pace {
+            if metric.percentage == 0 {
+                Text("Limit reached").font(.system(size: 10)).foregroundStyle(.secondary)
+            } else if let pace {
                 Text(summary(pace)).font(.system(size: 10)).foregroundStyle(.secondary)
                     .help("The marker shows an even-use budget at the observation time. Reserve/deficit is the difference in percentage points. Exhaustion is estimated from average usage since the window started, not recent activity.")
-            } else if metric.windowDuration != nil {
+            } else if metric.windowDuration != nil, metric.percentage < 100 {
                 Text("Pace unavailable").font(.system(size: 10)).foregroundStyle(.tertiary)
                     .help("Pace requires a known window duration, a future reset, and a successful reading from the last 15 minutes.")
             }

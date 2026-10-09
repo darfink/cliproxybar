@@ -428,7 +428,11 @@ private struct CompactQuotaAccountView: View {
 
     private func paceTooltip(_ metric: QuotaMetric) -> String {
         let reset = metric.resetTime.isEmpty ? "" : " · resets in " + metric.formattedResetTime
-        guard let pace = pace(for: metric) else { return metric.displayName + reset + " · Pace unavailable" }
+        if metric.percentage == 0 { return metric.displayName + reset + " · Limit reached" }
+        guard let pace = pace(for: metric) else {
+            let unavailable = metric.windowDuration != nil && metric.percentage < 100 ? " · Pace unavailable" : ""
+            return metric.displayName + reset + unavailable
+        }
         let difference = Int(abs(pace.reservePoints).rounded())
         let balance = difference == 0 ? "On pace" : "\(difference)% " + (pace.reservePoints >= 0 ? "in reserve" : "in deficit")
         return balance + reset + ". Marker: even-use budget at the last reading."

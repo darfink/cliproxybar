@@ -1,9 +1,8 @@
-CLIProxyBar 0.1.1 fixes misleading quota warnings in the menu bar:
+CLIProxyBar 0.1.2 makes quota status clearer:
 
-- Quota cooldowns keep their percentages in the menu bar, including 0% and 100% usage.
-- Disabled accounts use a pause icon instead of an error triangle.
-- Failed refreshes retain cached percentages. Details still show the refresh problem and observation time.
-- README screenshots use sRGB colors and keep email addresses blurred.
+- Quotas at 100% usage show **Limit reached**.
+- When an unused session has no active window, the menu omits **Pace unavailable**.
+- Compact tooltips use the same status labels as the expanded menu.
 
 Requires macOS 14 or later and a local CLIProxyAPI instance.
 OpenCode Go requires a plugin with native generic quota support.
