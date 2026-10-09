@@ -28,16 +28,26 @@ final class QuotaResetAlerts: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func updateAuthorization(requestIfNeeded: Bool = false) async {
-        guard let center else { return }
+        guard center != nil else { return }
         authorizationStatus = await currentAuthorizationStatus()
         guard requestIfNeeded, authorizationStatus == .notDetermined, !requestingPermission else { return }
         requestingPermission = true
         defer { requestingPermission = false }
         do {
-            _ = try await center.requestAuthorization(options: [.alert, .sound])
+            try await requestNotificationPermission()
             authorizationStatus = await currentAuthorizationStatus()
             issue = nil
         } catch { issue = "macOS could not enable reset notifications. Try again in Settings." }
+    }
+
+    private func requestNotificationPermission() async throws {
+        guard let center else { return }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            center.requestAuthorization(options: [.alert, .sound]) { _, error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume() }
+            }
+        }
     }
 
     private func currentAuthorizationStatus() async -> UNAuthorizationStatus {
@@ -52,6 +62,16 @@ final class QuotaResetAlerts: NSObject, UNUserNotificationCenterDelegate {
         return UNAuthorizationStatus(rawValue: rawValue) ?? .notDetermined
     }
 
+    private func enqueueNotification(_ request: UNNotificationRequest) async throws {
+        guard let center else { return }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            center.add(request) { error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume() }
+            }
+        }
+    }
+
     func previewConfetti() {
         if !confetti.show() { issue = "Confetti is paused while macOS Reduce Motion is enabled." }
         else { issue = nil }
@@ -62,7 +82,7 @@ final class QuotaResetAlerts: NSObject, UNUserNotificationCenterDelegate {
             confetti.show()
         }
         guard events.contains(where: { $0.kind == .short ? preferences.notifiesShortResets : preferences.notifiesLongResets }),
-              let center else { return }
+              center != nil else { return }
         await updateAuthorization()
         guard authorizationStatus == .authorized || authorizationStatus == .provisional else { return }
         let selected = events.filter { $0.kind == .short ? preferences.notifiesShortResets : preferences.notifiesLongResets }
@@ -79,7 +99,7 @@ final class QuotaResetAlerts: NSObject, UNUserNotificationCenterDelegate {
             content.threadIdentifier = "quota-reset-" + first.accountID
             let identifier = ProxyUsageHistory.digest(group.map(\.identifier).sorted().joined(separator: "\n"))
             do {
-                try await center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+                try await enqueueNotification(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
                 issue = nil
             } catch { issue = "A reset notification could not be delivered. Check macOS notification settings." }
         }
