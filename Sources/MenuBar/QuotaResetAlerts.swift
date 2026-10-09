@@ -92,9 +92,13 @@ final class QuotaResetAlerts: NSObject, UNUserNotificationCenterDelegate {
             let provider = QuotaProvider(rawValue: first.provider)?.displayName ?? "Provider"
             let content = UNMutableNotificationContent()
             content.title = provider + " quota reset"
-            content.subtitle = first.accountName
+            let accountName = first.accountName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let repeatsProvider = [provider, first.provider].contains {
+                accountName.caseInsensitiveCompare($0) == .orderedSame
+            }
+            content.subtitle = repeatsProvider ? "" : accountName
             content.body = group.map(\.windowName).sorted().joined(separator: ", ")
-                + (group.count == 1 ? " allowance is available again." : " allowances are available again.")
+                + (group.count == 1 ? " allowance restored." : " allowances restored.")
             content.sound = .default
             content.threadIdentifier = "quota-reset-" + first.accountID
             let identifier = ProxyUsageHistory.digest(group.map(\.identifier).sorted().joined(separator: "\n"))

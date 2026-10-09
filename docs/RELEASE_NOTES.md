@@ -1,12 +1,7 @@
-CLIProxyBar 0.3.1 adds configurable quota reset alerts:
+CLIProxyBar 0.3.2 makes quota reset notifications more concise:
 
-- Settings has separate notifications for session/rolling resets and weekly/monthly resets.
-- Weekly and monthly resets can play a short confetti animation, independently of notifications. A Preview button shows the effect.
-- All options are off by default. macOS requests notification permission when you enable an alert.
-- Fresh provider readings confirm scheduled resets. Rolling alerts wait for the allowance to become fully available again.
-- Confirmed resets are remembered across launches. Limits that reset together produce one notification per account and one confetti animation.
-- Confetti respects Reduce Motion, stays transparent, and does not intercept clicks or keyboard focus.
-- CLIProxyBar refreshes at known reset times as well as during regular polling. The app must be running and connected.
+- Notifications hide account names that repeat the provider name. Distinct account names remain visible.
+- Shorter reset messages identify the restored quota window.
 
 Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in updater.
 
