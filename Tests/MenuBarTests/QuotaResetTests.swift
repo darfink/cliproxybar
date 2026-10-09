@@ -177,6 +177,7 @@ final class QuotaResetTests: XCTestCase {
 
     @MainActor
     func testConfettiCanvasLeavesBackgroundTransparent() throws {
+        try requireCanvasRenderer()
         let view = ConfettiCanvas(particles: ConfettiParticle.make(seed: 123), elapsed: 1.5)
             .frame(width: 800, height: 500)
         let renderer = ImageRenderer(content: view)
@@ -187,11 +188,20 @@ final class QuotaResetTests: XCTestCase {
     @MainActor
     func testConfettiVisualPreview() throws {
         guard let path = ProcessInfo.processInfo.environment["CLIPROXYBAR_CONFETTI_PREVIEW"] else { return }
+        try requireCanvasRenderer()
         let view = ConfettiCanvas(particles: ConfettiParticle.make(seed: 123), elapsed: 1.5)
             .frame(width: 800, height: 500).background(Color(nsColor: NSColor(white: 0.12, alpha: 1)))
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
         try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: path))
+    }
+
+    private func requireCanvasRenderer() throws {
+        #if arch(x86_64)
+        guard ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != "true" else {
+            throw XCTSkip("GitHub's Intel VM cannot render the Metal-backed Canvas. This fixture runs on Apple Silicon CI and native desktops.")
+        }
+        #endif
     }
 }
