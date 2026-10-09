@@ -1,13 +1,13 @@
-CLIProxyBar 0.2.1 improves usage panels and supports remote CLIProxyAPI servers:
+CLIProxyBar 0.2.2 makes daily activity easier to compare:
 
-- Settings accepts HTTP and HTTPS proxy URLs, including reverse-proxy path prefixes.
-- The **Usage** panel aligns with the hovered account. A colored pointer identifies the source when screen bounds shift the panel.
-- The activity grid includes month and weekday labels, a today marker, and dashed outlines for upcoming days.
-- Hover over a day to see its date, tokens, requests, and failures. Earlier unrecorded days remain distinct from zero usage.
+- Four distinct color levels separate quiet and busy days, even with large token counts or unusually busy days.
+- The **Tokens / Requests** selector controls which daily totals determine the colors.
+- Hover details continue to show exact token totals, request counts, and failures.
+- The README includes current compact, expanded, and usage views in light and dark mode, with fictional accounts and sample usage.
 
-For remote servers, enable `remote-management.allow-remote` on CLIProxyAPI. Use HTTPS to protect the management key in transit.
-Usage collection remains optional and covers traffic through the configured proxy while CLIProxyBar runs.
-CLIProxyAPI removes usage events after retrieval. Use one collector per proxy.
+CLIProxyAPI records request usage. CLIProxyBar collects these events and saves daily summaries locally while the app runs.
+The usage queue retains events for about a minute. Closing the app or sleep can create gaps in recorded history.
+Use one collector per proxy because retrieval removes events from the queue.
 
 Requires macOS 14 or later and a CLIProxyAPI instance with management access.
 OpenCode Go requires a plugin with native generic quota support.

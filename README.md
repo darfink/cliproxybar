@@ -16,12 +16,30 @@ A compact menu keeps the essentials close. Option-click opens an expanded view w
     <th>Option-click for details</th>
   </tr>
   <tr>
-    <td valign="top"><img src="docs/screenshots/compact.png" width="280" alt="Compact menu with colored Claude Code, Codex, and OpenCode Go quota gauges"></td>
-    <td valign="top"><img src="docs/screenshots/expanded.png" width="360" alt="Expanded menu with quota usage, pace markers, reset times, and account details"></td>
+    <td valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/compact-dark.png">
+        <img src="docs/screenshots/compact.png" width="280" alt="Compact menu with Claude Code, Codex, and OpenCode Go quotas and pace markers">
+      </picture>
+    </td>
+    <td valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/expanded-dark.png">
+        <img src="docs/screenshots/expanded.png" width="360" alt="Expanded menu with account quotas, pace estimates, reset times, and available resets">
+      </picture>
+    </td>
   </tr>
 </table>
 
-Email addresses are blurred. The expanded screenshot shows the earlier app label in its Quit action.
+**Usage card**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/usage-dark.png">
+  <img src="docs/screenshots/usage.png" width="520" alt="Usage card with token totals, Tokens and Requests selector, daily activity, and model totals">
+</picture>
+
+Images show the current interface with fictional accounts and sample usage.
+Light and dark images follow your color preference.
 
 ## Features
 
@@ -108,10 +126,13 @@ It includes input, output, cache, and reasoning counters, an activity grid, and 
 The panel aligns with the hovered account. A colored pointer identifies the account when screen bounds shift the panel.
 Each activity square represents one day. Month and weekday labels orient the 26-week grid.
 Today has a colored border. Upcoming days have dashed outlines, and days before collection have a faint fill.
+Choose **Tokens** or **Requests** to compare daily activity.
+Four color levels separate quiet and busy days within the visible history.
 Hover over a square to see its date, recorded tokens, requests, and failures.
 Available token fields depend on the provider. Request counters come from CLIProxyAPI.
 
-Collection runs every 15 seconds while CLIProxyBar runs. The app saves daily summaries for up to one year.
+CLIProxyAPI records request usage. CLIProxyBar reads its usage queue every 15 seconds while the app runs.
+CLIProxyBar saves daily summaries locally for up to one year.
 The panel covers traffic through this proxy. It labels the start of collection and leaves earlier history empty.
 The default queue retains events for 60 seconds. Closing the app or sleep can create gaps in the recorded totals.
 

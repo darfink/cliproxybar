@@ -3,6 +3,26 @@ import XCTest
 @testable import MenuBar
 
 final class UsagePresentationTests: XCTestCase {
+    func testActivityColorsKeepDistinctLevelsWithLargeTokenCountsAndOutliers() {
+        let values: [Int64] = [100_000, 120_000, 140_000, 160_000, 180_000, 200_000, 220_000, 90_000_000]
+        let scale = UsageActivityScale(values: values + [0, 0, 0])
+        XCTAssertEqual(values.map { scale.level(for: $0) }, [1, 1, 2, 2, 3, 3, 4, 4])
+        XCTAssertEqual(scale.level(for: 0), 0)
+        XCTAssertEqual(scale.level(for: -1), 0)
+        XCTAssertGreaterThan(UsageActivityScale.opacity(for: 4) - UsageActivityScale.opacity(for: 1), 0.7)
+    }
+
+    func testActivityColorsKeepEqualCountsEqualAndHandleEmptyHistory() {
+        XCTAssertEqual(UsageActivityScale(values: []).level(for: 0), 0)
+        XCTAssertEqual(UsageActivityScale(values: [0, 0]).level(for: 0), 0)
+        let scale = UsageActivityScale(values: [7, 7, 7, 7])
+        XCTAssertEqual(scale.level(for: 7), 4)
+        var day = ProxyUsageDay(date: Date(), requests: 7)
+        day.tokens.total = 100_000
+        XCTAssertEqual(UsageActivityMeasure.requests.value(for: day), 7)
+        XCTAssertEqual(UsageActivityMeasure.tokens.value(for: day), 100_000)
+    }
+
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.firstWeekday = 2

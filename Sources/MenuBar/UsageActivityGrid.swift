@@ -1,6 +1,43 @@
 import AppKit
 import SwiftUI
 
+enum UsageActivityMeasure: String, CaseIterable {
+    case tokens = "Tokens"
+    case requests = "Requests"
+
+    func value(for day: ProxyUsageDay) -> Int64 {
+        self == .tokens ? day.tokens.total : day.requests
+    }
+}
+
+struct UsageActivityScale {
+    private let maximum: Int64
+    private let thresholds: [Double]
+
+    init(values: [Int64]) {
+        let positive = values.filter { $0 > 0 }.sorted()
+        maximum = positive.last ?? 0
+        thresholds = [0.25, 0.5, 0.75].map { fraction in
+            guard !positive.isEmpty else { return 0 }
+            let position = Double(positive.count - 1) * fraction
+            let lower = Int(position)
+            let upper = min(lower + 1, positive.count - 1)
+            let weight = position - Double(lower)
+            return Double(positive[lower]) * (1 - weight) + Double(positive[upper]) * weight
+        }
+    }
+
+    func level(for value: Int64) -> Int {
+        guard value > 0, maximum > 0 else { return 0 }
+        if value >= maximum { return 4 }
+        return (thresholds.firstIndex { Double(value) <= $0 } ?? 3) + 1
+    }
+
+    static func opacity(for level: Int) -> Double {
+        [0, 0.22, 0.46, 0.72, 1][min(4, max(0, level))]
+    }
+}
+
 struct UsageActivityCalendar {
     enum Status { case upcoming, unrecorded, recorded }
     let calendar: Calendar
@@ -50,21 +87,40 @@ struct ProxyUsageActivityGrid: View {
     var now = Date()
     var calendar = Calendar.current
     @State private var hoveredDate: Date?
+    @State private var measure = UsageActivityMeasure.tokens
     private let cellSize: CGFloat = 14
     private let spacing: CGFloat = 3
     private let labelWidth: CGFloat = 28
     private var activity: UsageActivityCalendar { UsageActivityCalendar(days: days, startedAt: startedAt, now: now, calendar: calendar) }
-    private var maximum: Double { Double(days.map(\.tokens.total).max() ?? 0) }
     private var gridWidth: CGFloat { cellSize * 26 + spacing * 25 }
 
     var body: some View {
         let data = activity
+        let scale = UsageActivityScale(values: data.days.filter { $0.key >= data.start && $0.key <= data.today }
+            .map { measure.value(for: $0.value) })
         let selection = hoveredDate ?? data.today
         VStack(alignment: .leading, spacing: 7) {
             HStack {
                 Text("Daily activity").font(.system(size: 11, weight: .semibold))
                 Spacer()
-                Text("One square = one day").font(.system(size: 10)).foregroundStyle(.tertiary)
+                HStack(spacing: 1) {
+                    ForEach(UsageActivityMeasure.allCases, id: \.self) { option in
+                        Button { measure = option } label: {
+                            Text(option.rawValue)
+                                .font(.system(size: 10, weight: measure == option ? .semibold : .regular))
+                                .foregroundStyle(measure == option ? Color.primary : Color.secondary)
+                                .padding(.horizontal, 7).padding(.vertical, 3)
+                                .background(measure == option ? Color.secondary.opacity(0.14) : .clear,
+                                            in: RoundedRectangle(cornerRadius: 4))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Color activity by " + option.rawValue.lowercased())
+                        .accessibilityAddTraits(measure == option ? .isSelected : [])
+                    }
+                }
+                .padding(2)
+                .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                .help("One square is one day. Darker shades mean more " + measure.rawValue.lowercased() + ". Hover for exact totals.")
             }
             HStack(spacing: spacing) {
                 Color.clear.frame(width: labelWidth, height: 12)
@@ -92,7 +148,7 @@ struct ProxyUsageActivityGrid: View {
                         GridRow {
                             ForEach(0..<26, id: \.self) { week in
                                 let date = data.date(week: week, weekday: weekday)
-                                cell(date, data: data)
+                                cell(date, data: data, scale: scale)
                             }
                         }
                     }
@@ -111,8 +167,8 @@ struct ProxyUsageActivityGrid: View {
                 legend("No history", fill: .secondary.opacity(0.05))
                 Spacer(minLength: 0)
                 Text("Less").foregroundStyle(.tertiary)
-                ForEach(0..<4, id: \.self) { level in
-                    RoundedRectangle(cornerRadius: 2).fill(tint.opacity(0.25 + Double(level) * 0.25)).frame(width: 9, height: 9)
+                ForEach(1...4, id: \.self) { level in
+                    RoundedRectangle(cornerRadius: 2).fill(tint.opacity(UsageActivityScale.opacity(for: level))).frame(width: 9, height: 9)
                 }
                 Text("More").foregroundStyle(.tertiary)
             }.font(.system(size: 9))
@@ -130,12 +186,12 @@ struct ProxyUsageActivityGrid: View {
         }
     }
 
-    private func cell(_ date: Date, data: UsageActivityCalendar) -> some View {
+    private func cell(_ date: Date, data: UsageActivityCalendar, scale: UsageActivityScale) -> some View {
         let status = data.status(on: date)
         let today = date == data.today
         let selected = date == hoveredDate
         return RoundedRectangle(cornerRadius: 3)
-            .fill(cellColor(data.days[date], status: status))
+            .fill(cellColor(data.days[date], status: status, scale: scale))
             .padding(today || selected ? 2 : 0)
             .overlay {
                 RoundedRectangle(cornerRadius: 3).strokeBorder(
@@ -148,14 +204,13 @@ struct ProxyUsageActivityGrid: View {
             .accessibilityValue(data.detail(on: date))
     }
 
-    private func cellColor(_ day: ProxyUsageDay?, status: UsageActivityCalendar.Status) -> Color {
+    private func cellColor(_ day: ProxyUsageDay?, status: UsageActivityCalendar.Status, scale: UsageActivityScale) -> Color {
         switch status {
         case .upcoming: return .clear
         case .unrecorded: return .secondary.opacity(0.05)
         case .recorded:
-            guard let day, day.requests > 0 else { return .secondary.opacity(0.14) }
-            let intensity = maximum > 0 ? log1p(Double(day.tokens.total)) / log1p(maximum) : 0
-            return tint.opacity(0.25 + 0.75 * intensity)
+            let level = scale.level(for: day.map { measure.value(for: $0) } ?? 0)
+            return level == 0 ? .secondary.opacity(0.14) : tint.opacity(UsageActivityScale.opacity(for: level))
         }
     }
 
