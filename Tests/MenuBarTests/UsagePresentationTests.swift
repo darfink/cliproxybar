@@ -59,32 +59,31 @@ final class UsagePresentationTests: XCTestCase {
         XCTAssertEqual(disabled.status(on: disabled.today), .unrecorded)
     }
 
-    func testHoverPanelAlignsToAccountAndSwitchesSides() {
+    func testUsageMenuAlignsToAccountAndSwitchesSides() {
         let screen = NSRect(x: 0, y: 0, width: 1440, height: 900)
         let menu = NSRect(x: 1100, y: 80, width: 330, height: 800)
         let account = NSRect(x: 1110, y: 500, width: 310, height: 150)
-        let placement = UsagePanelPlacement.calculate(anchor: account, menu: menu,
+        let placement = UsageMenuPlacement.calculate(anchor: account, menu: menu,
             size: NSSize(width: 532, height: 500), screen: screen)
         XCTAssertTrue(placement.isLeftOfMenu)
         XCTAssertEqual(placement.frame.maxY, account.maxY)
         XCTAssertEqual(placement.frame.maxX, menu.minX - 6)
-        XCTAssertEqual(placement.markerY, 75)
         let leftMenu = NSRect(x: 50, y: 80, width: 330, height: 800)
-        let right = UsagePanelPlacement.calculate(anchor: NSRect(x: 60, y: 500, width: 310, height: 150),
+        let right = UsageMenuPlacement.calculate(anchor: NSRect(x: 60, y: 500, width: 310, height: 150),
             menu: leftMenu, size: placement.frame.size, screen: screen)
         XCTAssertFalse(right.isLeftOfMenu)
         XCTAssertEqual(right.frame.minX, leftMenu.maxX + 6)
     }
 
-    func testHoverPanelClampsAtScreenEdgesAndKeepsSourceMarkerAligned() {
+    func testUsageMenuClampsAtScreenEdges() {
         // A second monitor can have a negative origin. Bounds must stay local to it.
         let screen = NSRect(x: -1440, y: 0, width: 1440, height: 700)
         let account = NSRect(x: -320, y: 30, width: 300, height: 90)
-        let placement = UsagePanelPlacement.calculate(anchor: account,
+        let placement = UsageMenuPlacement.calculate(anchor: account,
             menu: NSRect(x: -330, y: 10, width: 320, height: 680),
             size: NSSize(width: 532, height: 900), screen: screen)
         XCTAssertEqual(placement.frame.height, 684)
         XCTAssertTrue(screen.contains(placement.frame))
-        XCTAssertEqual(placement.frame.maxY - placement.markerY, account.midY)
+        XCTAssertEqual(placement.frame.minY, screen.minY + 8)
     }
 }

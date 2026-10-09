@@ -108,7 +108,7 @@ final class ProxyUsageTests: XCTestCase {
     }
 
     @MainActor
-    func testAccountHoverPanelsExistInBothMenus() throws {
+    func testAccountUsageBelongsToNativeMenuHierarchyInBothViews() throws {
         var history = ProxyUsageHistory(endpoint: "http://localhost:8317")
         history.start(at: now)
         history.ingest([try event()], now: now, calendar: calendar)
@@ -127,8 +127,21 @@ final class ProxyUsageTests: XCTestCase {
         for expanded in [false, true] {
             let renderer = StatusBarMenuRenderer(snapshot: snapshot, commands: commands, expanded: expanded)
             let menu = renderer.buildMenu()
-            XCTAssertEqual(renderer.usageHoverController.accountCount, 1)
-            XCTAssertFalse(menu.items.contains { $0.submenu != nil })
+            let anchor = try XCTUnwrap(menu.items.first { $0.submenu is UsageSubmenu })
+            let submenu = try XCTUnwrap(anchor.submenu as? UsageSubmenu)
+            XCTAssertTrue(submenu.supermenu === menu)
+            XCTAssertTrue(submenu.anchorItem === anchor)
+            XCTAssertTrue(submenu.delegate === submenu)
+            XCTAssertNil(submenu.items.first?.action)
+            let content = try XCTUnwrap(submenu.items.first?.view)
+            XCTAssertEqual(content.frame.width, 520)
+
+            // Refresh moves the submenu to an existing account item.
+            let existing = NSMenuItem()
+            anchor.submenu = nil
+            existing.submenu = submenu
+            renderer.transferFilterScope(from: anchor, to: existing)
+            XCTAssertTrue(submenu.anchorItem === existing)
             let view = NSHostingView(rootView: ProxyUsageDetailView(usage: usage, provider: .codex, accountName: "example@example.com").frame(width: 520))
             view.setFrameSize(view.intrinsicContentSize)
             XCTAssertEqual(view.frame.width, 520)

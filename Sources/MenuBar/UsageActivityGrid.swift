@@ -103,24 +103,7 @@ struct ProxyUsageActivityGrid: View {
             HStack {
                 Text("Daily activity").font(.system(size: 11, weight: .semibold))
                 Spacer()
-                HStack(spacing: 1) {
-                    ForEach(UsageActivityMeasure.allCases, id: \.self) { option in
-                        Button { measure = option } label: {
-                            Text(option.rawValue)
-                                .font(.system(size: 10, weight: measure == option ? .semibold : .regular))
-                                .foregroundStyle(measure == option ? Color.primary : Color.secondary)
-                                .padding(.horizontal, 7).padding(.vertical, 3)
-                                .background(measure == option ? Color.secondary.opacity(0.14) : .clear,
-                                            in: RoundedRectangle(cornerRadius: 4))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Color activity by " + option.rawValue.lowercased())
-                        .accessibilityAddTraits(measure == option ? .isSelected : [])
-                    }
-                }
-                .padding(2)
-                .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
-                .help("One square is one day. Darker shades mean more " + measure.rawValue.lowercased() + ". Hover for exact totals.")
+                UsageActivityMeasurePicker(measure: $measure)
             }
             HStack(spacing: spacing) {
                 Color.clear.frame(width: labelWidth, height: 12)
@@ -221,6 +204,31 @@ struct ProxyUsageActivityGrid: View {
                 .frame(width: 9, height: 9)
             Text(text).foregroundStyle(.secondary)
         }
+    }
+}
+
+struct UsageActivityMeasurePicker: View {
+    @Binding var measure: UsageActivityMeasure
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(UsageActivityMeasure.allCases, id: \.self) { option in
+                Button { measure = option } label: {
+                    Text(option.rawValue)
+                        .font(.system(size: 10, weight: measure == option ? .semibold : .regular))
+                        .foregroundStyle(measure == option ? Color.primary : Color.secondary)
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(measure == option ? Color.secondary.opacity(0.14) : .clear,
+                                    in: RoundedRectangle(cornerRadius: 4))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Color activity by " + option.rawValue.lowercased())
+                .accessibilityAddTraits(measure == option ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+        .help("One square is one day. Darker shades mean more " + measure.rawValue.lowercased() + ". Hover for exact totals.")
     }
 }
 

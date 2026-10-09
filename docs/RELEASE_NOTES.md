@@ -1,9 +1,8 @@
-CLIProxyBar 0.2.2 makes daily activity easier to compare:
+CLIProxyBar 0.2.3 fixes interaction with the Usage card:
 
-- Four distinct color levels separate quiet and busy days, even with large token counts or unusually busy days.
-- The **Tokens / Requests** selector controls which daily totals determine the colors.
-- Hover details continue to show exact token totals, request counts, and failures.
-- The README includes current compact, expanded, and usage views in light and dark mode, with fictional accounts and sample usage.
+- Click **Tokens** or **Requests** without closing the Usage card or the main menu.
+- Native submenus keep the card beside its account and handle mouse clicks, hover navigation, and dismissal.
+- **⌘R** also refreshes quotas from inside the Usage card.
 
 CLIProxyAPI records request usage. CLIProxyBar collects these events and saves daily summaries locally while the app runs.
 The usage queue retains events for about a minute. Closing the app or sleep can create gaps in recorded history.

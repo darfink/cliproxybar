@@ -86,7 +86,6 @@ final class StatusBarMenuRenderer {
     private let commands: StatusBarCommandDispatcher
     private let providerFilterController: StatusBarProviderFilterController
     private let expanded: Bool
-    let usageHoverController: UsageHoverController
     private var menuWidth: CGFloat { expanded ? 360 : 280 }
 
     init(
@@ -97,7 +96,6 @@ final class StatusBarMenuRenderer {
         self.expanded = expanded
         self.snapshot = snapshot
         self.commands = commands
-        self.usageHoverController = UsageHoverController(appearance: snapshot.appearanceMode.appKitAppearance, locale: snapshot.language.locale)
         let availableProviders = snapshot.providers.map(\.provider)
         let selectedProvider = snapshot.selectedProvider.flatMap { provider in
             availableProviders.contains(provider) ? provider : nil
@@ -195,7 +193,7 @@ final class StatusBarMenuRenderer {
                     showAccountName: provider.accounts.count > 1,
                     displayMode: snapshot.displaySettings.quotaDisplayMode
                 ))
-                usageHoverController.register(item, account: account)
+                attachUsageSubmenu(to: item, account: account)
                 menu.addItem(item)
             }
         }
@@ -235,7 +233,9 @@ final class StatusBarMenuRenderer {
 
     func transferFilterScope(from source: NSMenuItem, to destination: NSMenuItem) {
         providerFilterController.transferScope(from: source, to: destination)
-        usageHoverController.transferAnchor(from: source, to: destination)
+        // A refresh moves the submenu to an existing item. Its placement must
+        // follow that live item rather than the temporary renderer's item.
+        (destination.submenu as? UsageSubmenu)?.anchorItem = destination
     }
 
     func activateProviderFilter(in menu: NSMenu) {
@@ -264,7 +264,7 @@ final class StatusBarMenuRenderer {
             && account.quota.models.contains { $0.name.hasPrefix("antigravity-") }
 
         if account.proxyUsage != nil {
-            usageHoverController.register(item, account: account)
+            attachUsageSubmenu(to: item, account: account)
         } else if provider == .codex, let analytics = account.quota.analytics, !analytics.isEmpty {
             let submenu = buildCodexAnalyticsSubmenu(analytics: analytics)
             item.submenu = submenu
@@ -280,6 +280,13 @@ final class StatusBarMenuRenderer {
         let submenu = makeMenu()
         submenu.addItem(viewItem(for: AnalyticsDetailSection(analytics: analytics), width: 640))
         return submenu
+    }
+
+    private func attachUsageSubmenu(to item: NSMenuItem, account: StatusBarMenuAccountSnapshot) {
+        guard let usage = account.proxyUsage else { return }
+        item.submenu = UsageSubmenu(usage: usage, provider: account.id.provider,
+            accountName: account.email, anchor: item,
+            appearance: snapshot.appearanceMode.appKitAppearance, locale: snapshot.language.locale)
     }
 
     // MARK: - Antigravity Submenu

@@ -38,7 +38,6 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
     private var hasPendingMenuRebuild = false
     private var configuration: Configuration?
     private var lastRenderSignature: RenderSignature?
-    private var usageHoverController: UsageHoverController?
     private var appearanceObservation: NSKeyValueObservation?
     
     private var menuSnapshotProvider: (@MainActor () -> StatusBarMenuSnapshot)?
@@ -221,7 +220,6 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
     }
     
     public func menuDidClose(_ menu: NSMenu) {
-        usageHoverController?.stop()
         DispatchQueue.main.async { [weak self] in
             self?.renderStatusBar()
         }
@@ -293,8 +291,6 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
             expanded: isExpandedMenu
         )
         let nativeMenu = renderer.buildMenu()
-        usageHoverController?.stop()
-        usageHoverController = renderer.usageHoverController
         // Keep existing menu items alive during refresh. Emptying a tracking
         // menu can dismiss it even when the shortcut itself was consumed.
         let replacements = nativeMenu.items
@@ -324,7 +320,6 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
         }
         while menu.items.count > replacements.count { menu.removeItem(at: menu.items.count - 1) }
         renderer.activateProviderFilter(in: menu)
-        usageHoverController?.start()
     }
     
     // MARK: - Menu Actions
@@ -335,8 +330,6 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
     }
     
     func removeStatusItem() {
-        usageHoverController?.stop()
-        usageHoverController = nil
         appearanceObservation = nil
         if let item = statusItem {
             NSStatusBar.system.removeStatusItem(item)

@@ -17,6 +17,18 @@ For a failed publication, run the Release workflow manually with the existing ta
 
 The default release has an ad hoc signature. It has no Apple notarization and requires macOS approval after download.
 
+## Test menu interaction
+
+On a macOS desktop, run the native menu fixtures:
+
+```sh
+CLIPROXYBAR_MENU_INTERACTION_TEST=1 swift test --filter UsageMenuInteractionTests
+```
+
+These tests click the activity selector and measure native menu placement. They use fictional data and their own windows.
+The selector fixture opens under the cursor without moving it. Keep the cursor away from screen edges during this test.
+CI skips these desktop fixtures and runs the remaining regression tests.
+
 ## Optional Developer ID signing
 
 A Developer ID Application certificate can sign a local release build:
