@@ -18,6 +18,7 @@ final class DisplayPreferences {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored var onChange: (() -> Void)?
     @ObservationIgnored var onEndpointChange: (() -> Void)?
+    @ObservationIgnored var onUsageTrackingChange: (() -> Void)?
     private(set) var endpoint: String
     private(set) var hiddenMenuBarProviders: Set<String>
 
@@ -49,10 +50,18 @@ final class DisplayPreferences {
             onChange?()
         }
     }
+    var tracksProxyUsage: Bool {
+        didSet {
+            guard oldValue != tracksProxyUsage else { return }
+            defaults.set(tracksProxyUsage, forKey: "tracksProxyUsage")
+            onUsageTrackingChange?()
+        }
+    }
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         hiddenMenuBarProviders = Set(defaults.stringArray(forKey: "hiddenMenuBarProviders") ?? [])
         endpoint = defaults.string(forKey: "endpoint") ?? "http://127.0.0.1:8317"
         mode = defaults.string(forKey: "quotaDisplayMode").flatMap(QuotaDisplayMode.init(rawValue:)) ?? .used
+        tracksProxyUsage = defaults.bool(forKey: "tracksProxyUsage")
     }
 }

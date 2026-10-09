@@ -187,12 +187,14 @@ final class StatusBarMenuRenderer {
         }
         for provider in snapshot.providers {
             for account in provider.accounts {
-                menu.addItem(viewItem(for: CompactQuotaAccountView(
+                let item = viewItem(for: CompactQuotaAccountView(
                     provider: provider.provider,
                     account: account,
                     showAccountName: provider.accounts.count > 1,
                     displayMode: snapshot.displaySettings.quotaDisplayMode
-                )))
+                ))
+                addProxyUsageSubmenu(to: item, account: account)
+                menu.addItem(item)
             }
         }
         if snapshot.providers.isEmpty {
@@ -258,7 +260,9 @@ final class StatusBarMenuRenderer {
         let isAntigravitySummary = provider == .antigravity
             && account.quota.models.contains { $0.name.hasPrefix("antigravity-") }
 
-        if provider == .codex, let analytics = account.quota.analytics, !analytics.isEmpty {
+        if account.proxyUsage != nil {
+            addProxyUsageSubmenu(to: item, account: account)
+        } else if provider == .codex, let analytics = account.quota.analytics, !analytics.isEmpty {
             let submenu = buildCodexAnalyticsSubmenu(analytics: analytics)
             item.submenu = submenu
         } else if provider == .antigravity && !account.quota.models.isEmpty && !isAntigravitySummary {
@@ -267,6 +271,13 @@ final class StatusBarMenuRenderer {
         }
 
         return item
+    }
+
+    private func addProxyUsageSubmenu(to item: NSMenuItem, account: StatusBarMenuAccountSnapshot) {
+        guard let usage = account.proxyUsage else { return }
+        let submenu = makeMenu()
+        submenu.addItem(viewItem(for: ProxyUsageDetailView(usage: usage, provider: account.id.provider, accountName: account.email), width: 520))
+        item.submenu = submenu
     }
 
     private func buildCodexAnalyticsSubmenu(analytics: QuotaAnalytics) -> NSMenu {
@@ -563,7 +574,7 @@ private struct ProviderFilterButton: View {
 
 // MARK: Monochrome Provider Icon
 
-private struct ProviderIconMono: View {
+struct ProviderIconMono: View {
     let provider: QuotaProvider
     let size: CGFloat
     var tint: Color = .primary

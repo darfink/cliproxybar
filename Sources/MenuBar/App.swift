@@ -52,9 +52,11 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     var message = "Connecting to local CLIProxyAPI…"
     var selected: QuotaProvider?
     var pollTask: Task<Void, Never>?
+    var usageCollector: ProxyUsageCollector
     init(client: LocalProxyClient) {
         self.client = client
         cache = QuotaCache(endpoint: client.baseURL.absoluteString)
+        usageCollector = ProxyUsageCollector(client: client)
         super.init()
         do {
             accounts = try cache.load()
@@ -64,6 +66,8 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         preferences.onChange = { [weak self] in self?.render() }
         preferences.onEndpointChange = { [weak self] in self?.applyEndpoint() }
+        preferences.onUsageTrackingChange = { [weak self] in self?.applyUsageTracking() }
+        usageCollector.onChange = { [weak self] in self?.statusBar.invalidateMenuContent() }
         commands = StatusBarCommandDispatcher(handlers: StatusBarCommandHandlers(
             refreshAll: { [weak self] in await self?.refresh() },
             refreshProvider: { [weak self] provider in await self?.refresh(provider: provider.rawValue) },
@@ -103,6 +107,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
             print("Offline startup: cachedAccounts=\(cachedOnLaunch), menuItems=\(menu.items.count)")
             exit(cachedOnLaunch > 0 && accounts.allSatisfy { !$0.providerQuota().models.isEmpty } ? 0 : 1)
         }
+        if !CommandLine.arguments.contains("--smoke-test") { applyUsageTracking() }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()
@@ -110,11 +115,24 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
-    func applicationWillTerminate(_ notification: Notification) { pollTask?.cancel() }
+    func applicationWillTerminate(_ notification: Notification) {
+        pollTask?.cancel()
+        usageCollector.stop()
+    }
+
+    private func applyUsageTracking() {
+        if preferences.tracksProxyUsage { usageCollector.start() }
+        else { usageCollector.stop() }
+        render()
+    }
     private func applyEndpoint() {
         guard let newClient = try? LocalProxyClient(endpoint: preferences.endpoint) else { return }
         endpointGeneration += 1
         client = newClient
+        usageCollector.stop()
+        usageCollector = ProxyUsageCollector(client: newClient)
+        usageCollector.onChange = { [weak self] in self?.statusBar.invalidateMenuContent() }
+        applyUsageTracking()
         cache = QuotaCache(endpoint: newClient.baseURL.absoluteString)
         accounts = (try? cache.load()) ?? []
         selected = nil
@@ -193,7 +211,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         let groups = Dictionary(grouping: accounts.filter { QuotaProvider(rawValue: $0.provider) != nil }, by: { QuotaProvider(rawValue: $0.provider)! })
         let providers = groups.keys.sorted { $0.rawValue < $1.rawValue }.map { provider in
             StatusBarMenuProviderSnapshot(provider: provider, accounts: (groups[provider] ?? []).map { account in
-                StatusBarMenuAccountSnapshot(id: QuotaAccountID(provider: provider, accountKey: account.name), email: account.displayName, quota: account.providerQuota(), subscription: nil, isActiveInIDE: false, isRefreshing: refreshing, isRefreshBlocked: refreshing, refreshIssue: account.quotaIssue)
+                StatusBarMenuAccountSnapshot(id: QuotaAccountID(provider: provider, accountKey: account.name), email: account.displayName, quota: account.providerQuota(), subscription: nil, isActiveInIDE: false, isRefreshing: refreshing, isRefreshBlocked: refreshing, refreshIssue: account.quotaIssue, proxyUsage: usageCollector.snapshot(for: account))
             }, isRefreshing: refreshing, supportsScopedRefresh: true)
         }
         return StatusBarMenuSnapshot(connectionMessage: message, isLocalProxyMode: true, proxyPort: UInt16(client.baseURL.port ?? 80), isProxyRunning: connected, tunnel: CloudflareTunnelSnapshot(), providers: providers, selectedProvider: selected, isLoadingQuotas: refreshing, displaySettings: StatusBarMenuDisplaySettings(quotaDisplayMode: preferences.mode, quotaDisplayStyle: .lowestBar, hideSensitiveInfo: false, modelAggregationMode: .lowest), appearanceMode: .system, language: .english)

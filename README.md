@@ -29,6 +29,7 @@ Email addresses are blurred. The expanded screenshot shows the earlier app label
 - Usage or remaining percentages, with optional provider indicators in the menu bar.
 - Pace markers and reserve or deficit estimates for supported fixed quota windows.
 - Cached readings at launch, followed by fresh provider requests.
+- Account hover panels with optional token history, model totals, and daily activity.
 - One refresh action, a refresh indicator inside the menu, and the ⌘R shortcut.
 - Local proxy URL and management key settings, available with ⌘,.
 
@@ -79,10 +80,37 @@ If macOS blocks the downloaded app, open **System Settings → Privacy & Securit
 | Option-click the menu bar item | Open the expanded menu |
 | ⌘R or Refresh | Fetch quotas for all supported accounts |
 | ⌘, or Settings | Change the display, visible providers, proxy URL, or management key |
+| Hover over an account | Show proxy usage and token history |
 | Open Local Management | Open your proxy's management page in the browser |
 
 Automatic refresh runs every five minutes. A failed request retains the previous reading and shows its status.
 The browser management page handles its own authentication. CLIProxyBar does not put the management key in browser URLs.
+
+## Proxy usage history
+
+1. Open **Settings** with ⌘,.
+2. Enable **Collect token usage**.
+3. Hover over an account in the compact or expanded menu.
+
+This option enables `usage-statistics-enabled` through the management API. CLIProxyAPI saves this setting in its configuration.
+You can also enable the setting directly in your CLIProxyAPI configuration:
+
+```yaml
+usage-statistics-enabled: true
+```
+
+The panel shows recorded token totals for today, yesterday, and the last 30 days.
+It includes input, output, cache, and reasoning counters, an activity grid, and totals by model.
+Available token fields depend on the provider. Request counters come from CLIProxyAPI.
+
+Collection runs every 15 seconds while CLIProxyBar runs. The app saves daily summaries for up to one year.
+The panel covers traffic through this proxy. It labels the start of collection and leaves earlier history empty.
+The default queue retains events for 60 seconds. Closing the app or sleep can create gaps in the recorded totals.
+
+CLIProxyAPI v8 supplies events through a queue that removes records after retrieval. Use one collector per proxy.
+Another dashboard or collector that reads this queue can consume events before CLIProxyBar receives them.
+Turning off **Collect token usage** pauses this app's collection and preserves its saved history.
+The proxy's statistics setting stays enabled for other tools.
 
 ## Privacy
 
@@ -92,6 +120,8 @@ Provider quota requests go through CLIProxyAPI with the selected account. The ap
 
 The quota cache contains account display names, quota values, and timestamps. It contains no management key or authentication index.
 The cache lives at `~/Library/Application Support/CLIProxyBar/quota-cache.json`, with owner-only permissions.
+Optional usage history lives in the same directory, in a separate file for each proxy URL.
+It stores daily counters, model names, and hashed account identifiers. It excludes raw events, keys, headers, and response bodies.
 The app includes no telemetry or automatic updater.
 
 ## Build from source

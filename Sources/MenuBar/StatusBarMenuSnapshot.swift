@@ -10,6 +10,7 @@ struct StatusBarMenuAccountSnapshot: Equatable, Sendable {
     let isRefreshing: Bool
     let isRefreshBlocked: Bool
     var refreshIssue: String? = nil
+    var proxyUsage: ProxyUsageSnapshot? = nil
 }
 
 struct StatusBarMenuProviderSnapshot: Equatable, Sendable {
@@ -51,4 +52,3 @@ public struct StatusBarMenuSnapshot: Equatable, Sendable {
     let appearanceMode: AppearanceMode
     let language: AppLanguage
 }
-

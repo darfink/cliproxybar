@@ -24,6 +24,8 @@ struct ProxyAccount: Decodable, Sendable {
     var id_token: CodexAccountMetadata? = nil
     var fetchedQuota: ProviderQuota? = nil
     var quotaIssue: String? = nil
+    var success: Int64? = nil
+    var failed: Int64? = nil
 
     static func observationDate(_ raw: String?) -> Date {
         guard let raw else { return .distantPast }
@@ -121,6 +123,15 @@ struct LocalProxyClient: Sendable {
         try JSONDecoder().decode(AuthEnvelope.self, from: await send(path: "auth-files")).files
     }
 
+    func enableUsageStatistics() async throws {
+        _ = try await send(path: "usage-statistics-enabled", body: Data(#"{"value":true}"#.utf8), method: "PUT")
+    }
+
+    func fetchUsageEvents() async throws -> [ProxyUsageEvent] {
+        let data = try await send(path: "usage-queue", query: [URLQueryItem(name: "count", value: "500")])
+        return try JSONDecoder().decode([ProxyUsageEvent].self, from: data)
+    }
+
     func fetchQuota(for account: ProxyAccount) async throws -> ProviderQuota {
         if account.provider == "opencode-go" {
             guard let index = account.auth_index, !index.isEmpty else { throw LocalClientError.missingAuthIndex }
@@ -139,12 +150,14 @@ struct LocalProxyClient: Sendable {
         return quota
     }
 
-    private func send(path: String, body: Data? = nil) async throws -> Data {
-        var request = URLRequest(url: baseURL.appendingPathComponent("v0/management/" + path))
+    private func send(path: String, body: Data? = nil, method: String = "POST", query: [URLQueryItem] = []) async throws -> Data {
+        var components = URLComponents(url: baseURL.appendingPathComponent("v0/management/" + path), resolvingAgainstBaseURL: false)!
+        if !query.isEmpty { components.queryItems = query }
+        var request = URLRequest(url: components.url!)
         request.setValue("Bearer " + (try ManagementKey.read()), forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 20
         if let body {
-            request.httpMethod = "POST"
+            request.httpMethod = method
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
