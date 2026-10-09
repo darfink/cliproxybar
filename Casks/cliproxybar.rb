@@ -1,6 +1,6 @@
 cask "cliproxybar" do
-  version "0.2.6"
-  sha256 "5ef2e3cf88d6467315a395378849b2c46ea8e5799021e8f508f1e94a1e4f8508"
+  version "0.3.1"
+  sha256 "105b4b73911b4e41f2e2db3aee925934951654d9053c4a0ea138c42b2976ce51"
 
   url "https://github.com/darfink/cliproxybar/releases/download/v#{version}/CLIProxyBar-#{version}-macOS-universal.zip"
   name "CLIProxyBar"
