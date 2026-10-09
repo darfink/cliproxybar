@@ -76,7 +76,7 @@ enum LocalClientError: LocalizedError {
         case .missingKey: "Add your CLIProxyAPI management key in Settings (⌘,)."
         case .keychain(let status): "Keychain access failed (\(status))."
         case .http(let status): status == 401 || status == 403 ? "Management key was rejected. Update it in Settings (⌘,)." : "CLIProxyAPI returned HTTP \(status)."
-        case .invalidEndpoint: "Use an HTTP loopback endpoint (127.0.0.1 or localhost)."
+        case .invalidEndpoint: "Use an HTTP or HTTPS proxy URL without credentials, a query, or a fragment."
         }
     }
 }
@@ -114,8 +114,16 @@ enum ManagementKey {
 
 struct LocalProxyClient: Sendable {
     let baseURL: URL
+    var defaultPort: Int { baseURL.scheme == "https" ? 443 : 80 }
+    var isLoopback: Bool { ["127.0.0.1", "localhost", "[::1]"].contains(baseURL.host?.lowercased() ?? "") }
+    var displayAddress: String {
+        let host = baseURL.host ?? "Proxy"
+        return baseURL.port.map { "\(host):\($0)" } ?? host
+    }
     init(endpoint: String) throws {
-        guard let url = URL(string: endpoint), url.scheme == "http", ["127.0.0.1", "localhost", "[::1]"].contains(url.host ?? ""), url.user == nil, url.password == nil, url.query == nil, url.fragment == nil, url.path.isEmpty || url.path == "/" else { throw LocalClientError.invalidEndpoint }
+        guard let url = URL(string: endpoint), ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+              let host = url.host, !host.isEmpty, url.user == nil, url.password == nil,
+              url.query == nil, url.fragment == nil else { throw LocalClientError.invalidEndpoint }
         guard (1...65535).contains(url.port ?? 80) else { throw LocalClientError.invalidEndpoint }
         baseURL = url
     }

@@ -11,7 +11,7 @@ struct MenuBarApp {
             return
         }
         let endpoint = UserDefaults.standard.string(forKey: "endpoint") ?? "http://127.0.0.1:8317"
-        guard let client = try? LocalProxyClient(endpoint: endpoint) else { print("Invalid local endpoint."); exit(1) }
+        guard let client = try? LocalProxyClient(endpoint: endpoint) else { print("Invalid proxy URL."); exit(1) }
         if CommandLine.arguments.contains("--check") {
             Task {
                 do {
@@ -49,7 +49,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     var endpointGeneration = 0
     var connected = false
     var refreshing = false
-    var message = "Connecting to local CLIProxyAPI…"
+    var message = "Connecting to CLIProxyAPI…"
     var selected: QuotaProvider?
     var pollTask: Task<Void, Never>?
     var usageCollector: ProxyUsageCollector
@@ -138,7 +138,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         selected = nil
         connected = false
         refreshing = false
-        message = "Connecting to local CLIProxyAPI…"
+        message = "Connecting to CLIProxyAPI…"
         render()
         Task { [weak self] in await self?.refresh() }
     }
@@ -186,7 +186,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         } catch {
             guard generation == endpointGeneration else { return }
             connected = false
-            message = error is LocalClientError ? error.localizedDescription : "Cannot reach CLIProxyAPI. Check that your local proxy is running."
+            message = error is LocalClientError ? error.localizedDescription : "Cannot reach CLIProxyAPI. Check the proxy URL and that management access is enabled."
             if !accounts.isEmpty { message += "\nShowing previous readings." }
             for index in accounts.indices { accounts[index].quotaIssue = "Proxy unavailable · previous reading" }
         }
@@ -214,7 +214,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
                 StatusBarMenuAccountSnapshot(id: QuotaAccountID(provider: provider, accountKey: account.name), email: account.displayName, quota: account.providerQuota(), subscription: nil, isActiveInIDE: false, isRefreshing: refreshing, isRefreshBlocked: refreshing, refreshIssue: account.quotaIssue, proxyUsage: usageCollector.snapshot(for: account))
             }, isRefreshing: refreshing, supportsScopedRefresh: true)
         }
-        return StatusBarMenuSnapshot(connectionMessage: message, isLocalProxyMode: true, proxyPort: UInt16(client.baseURL.port ?? 80), isProxyRunning: connected, tunnel: CloudflareTunnelSnapshot(), providers: providers, selectedProvider: selected, isLoadingQuotas: refreshing, displaySettings: StatusBarMenuDisplaySettings(quotaDisplayMode: preferences.mode, quotaDisplayStyle: .lowestBar, hideSensitiveInfo: false, modelAggregationMode: .lowest), appearanceMode: .system, language: .english)
+        return StatusBarMenuSnapshot(connectionMessage: message, isLocalProxyMode: client.isLoopback, proxyPort: UInt16(client.baseURL.port ?? client.defaultPort), isProxyRunning: connected, tunnel: CloudflareTunnelSnapshot(), providers: providers, selectedProvider: selected, isLoadingQuotas: refreshing, displaySettings: StatusBarMenuDisplaySettings(quotaDisplayMode: preferences.mode, quotaDisplayStyle: .lowestBar, hideSensitiveInfo: false, modelAggregationMode: .lowest), appearanceMode: .system, language: .english, proxyAddress: client.displayAddress)
     }
     func render() {
         let hasReadings = accounts.contains { !$0.providerQuota().models.isEmpty }

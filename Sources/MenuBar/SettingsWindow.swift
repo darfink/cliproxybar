@@ -85,7 +85,7 @@ private struct DisplaySettingsView: View {
                     Text("The dropdown still shows every account. Turn all off for just the app icon.")
                         .font(.caption).foregroundStyle(.secondary)
                     Divider()
-                    Text("Proxy usage history").font(.headline)
+                    Text("Usage history").font(.headline)
                     Toggle("Collect token usage", isOn: $preferences.tracksProxyUsage)
                         .toggleStyle(.checkbox)
                     Text("Enables usage statistics on your proxy and saves token totals locally while this app runs. Hover over an account for details.")
@@ -93,7 +93,7 @@ private struct DisplaySettingsView: View {
                     Text("This app consumes the usage queue. Use one collector per proxy. Turning this off leaves the proxy’s statistics setting unchanged.")
                         .font(.caption).foregroundStyle(.secondary)
                     Divider()
-                    Text("Local proxy URL").font(.headline)
+                    Text("Proxy URL").font(.headline)
                     HStack {
                         TextField("http://127.0.0.1:8317", text: $endpointDraft)
                             .textFieldStyle(.roundedBorder)
@@ -101,7 +101,7 @@ private struct DisplaySettingsView: View {
                         Button("Apply", action: saveURL)
                             .disabled(endpointDraft.trimmingCharacters(in: .whitespacesAndNewlines) == preferences.endpoint)
                     }
-                    Text(endpointError ?? "Use http://localhost or a loopback IP, with your proxy port.")
+                    Text(endpointError ?? "Use your local or remote CLIProxyAPI URL. Prefer HTTPS for remote servers. A reverse-proxy path prefix is supported.")
                         .font(.caption)
                         .foregroundStyle(endpointError == nil ? Color.secondary : Color.red)
                     Text("Management key").font(.headline)

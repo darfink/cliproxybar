@@ -86,6 +86,7 @@ final class StatusBarMenuRenderer {
     private let commands: StatusBarCommandDispatcher
     private let providerFilterController: StatusBarProviderFilterController
     private let expanded: Bool
+    let usageHoverController: UsageHoverController
     private var menuWidth: CGFloat { expanded ? 360 : 280 }
 
     init(
@@ -96,6 +97,7 @@ final class StatusBarMenuRenderer {
         self.expanded = expanded
         self.snapshot = snapshot
         self.commands = commands
+        self.usageHoverController = UsageHoverController(appearance: snapshot.appearanceMode.appKitAppearance, locale: snapshot.language.locale)
         let availableProviders = snapshot.providers.map(\.provider)
         let selectedProvider = snapshot.selectedProvider.flatMap { provider in
             availableProviders.contains(provider) ? provider : nil
@@ -193,7 +195,7 @@ final class StatusBarMenuRenderer {
                     showAccountName: provider.accounts.count > 1,
                     displayMode: snapshot.displaySettings.quotaDisplayMode
                 ))
-                addProxyUsageSubmenu(to: item, account: account)
+                usageHoverController.register(item, account: account)
                 menu.addItem(item)
             }
         }
@@ -233,6 +235,7 @@ final class StatusBarMenuRenderer {
 
     func transferFilterScope(from source: NSMenuItem, to destination: NSMenuItem) {
         providerFilterController.transferScope(from: source, to: destination)
+        usageHoverController.transferAnchor(from: source, to: destination)
     }
 
     func activateProviderFilter(in menu: NSMenu) {
@@ -261,7 +264,7 @@ final class StatusBarMenuRenderer {
             && account.quota.models.contains { $0.name.hasPrefix("antigravity-") }
 
         if account.proxyUsage != nil {
-            addProxyUsageSubmenu(to: item, account: account)
+            usageHoverController.register(item, account: account)
         } else if provider == .codex, let analytics = account.quota.analytics, !analytics.isEmpty {
             let submenu = buildCodexAnalyticsSubmenu(analytics: analytics)
             item.submenu = submenu
@@ -271,13 +274,6 @@ final class StatusBarMenuRenderer {
         }
 
         return item
-    }
-
-    private func addProxyUsageSubmenu(to item: NSMenuItem, account: StatusBarMenuAccountSnapshot) {
-        guard let usage = account.proxyUsage else { return }
-        let submenu = makeMenu()
-        submenu.addItem(viewItem(for: ProxyUsageDetailView(usage: usage, provider: account.id.provider, accountName: account.email), width: 520))
-        item.submenu = submenu
     }
 
     private func buildCodexAnalyticsSubmenu(analytics: QuotaAnalytics) -> NSMenu {
@@ -321,6 +317,7 @@ final class StatusBarMenuRenderer {
             isLoading: snapshot.isLoadingQuotas,
             isProxyRunning: snapshot.isProxyRunning,
             proxyPort: snapshot.proxyPort,
+            proxyAddress: snapshot.proxyAddress,
             connectionMessage: snapshot.connectionMessage,
             onSettings: { self.commands.dispatch(.settings) },
             onRefresh: { self.commands.dispatch(.refreshAll) },
@@ -2404,6 +2401,7 @@ private struct MenuActionsView: View {
     let isLoading: Bool
     let isProxyRunning: Bool
     let proxyPort: UInt16
+    let proxyAddress: String?
     let connectionMessage: String
     let onSettings: () -> Void
     let onRefresh: () -> Void
@@ -2416,14 +2414,15 @@ private struct MenuActionsView: View {
             MenuBarActionButton(icon: "arrow.clockwise", title: "action.refresh".localized(),
                                 isLoading: isLoading, shortcut: "⌘R", action: onRefresh)
                 .disabled(isLoading)
-            MenuBarActionButton(icon: "macwindow", title: "Open Local Management", action: onOpenApp)
+            MenuBarActionButton(icon: "macwindow", title: "Open Management", action: onOpenApp)
             Divider().padding(.vertical, 4)
             HStack(spacing: 8) {
                 MenuBarActionButton(icon: "xmark.circle", title: "action.quit".localized(), action: onQuit)
                 HStack(spacing: 4) {
                     Circle().fill(isProxyRunning ? Color.green : Color.orange).frame(width: 5, height: 5)
-                    Text(isProxyRunning ? "Local proxy · " + String(proxyPort) : "Proxy offline")
-                        .font(.system(size: 10)).foregroundStyle(.tertiary).lineLimit(1).fixedSize()
+                    Text(isProxyRunning ? (proxyAddress ?? "Proxy · " + String(proxyPort)) : "Proxy offline")
+                        .font(.system(size: 10)).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+                        .frame(maxWidth: 180, alignment: .trailing)
                 }
                 .help(connectionMessage)
                 .padding(.trailing, 8)

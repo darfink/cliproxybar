@@ -44,10 +44,23 @@ final class QuotaSignalTests: XCTestCase {
     func testProxyUnavailabilityDoesNotImplyDisablement() throws {
         XCTAssertFalse(try decode(#"{"name":"test","provider":"claude","unavailable":true}"#).providerQuota().isForbidden)
     }
-    func testRejectsNonLocalOrCredentialBearingEndpoints() throws {
-        for endpoint in ["http://example.com", "https://127.0.0.1:8317", "http://user:pass@localhost:8317", "http://localhost:8317/path", "http://localhost:8317?token=secret"] {
+    func testAcceptsRemoteProxyAndPathPrefixesWithoutEmbeddedCredentials() throws {
+        for endpoint in ["http://127.0.0.1:8317", "http://localhost:9000", "http://[::1]:8317",
+                         "https://127.0.0.1:8317", "https://proxy.example.com", "http://192.168.1.5:8317",
+                         "https://proxy.example.com/cli/"] {
+            XCTAssertNoThrow(try LocalProxyClient(endpoint: endpoint))
+        }
+        for endpoint in ["ftp://example.com", "http://user:pass@localhost:8317", "http://localhost:8317?token=secret",
+                         "https://example.com/#key", "http://localhost:0", "http://localhost:99999", "http:///", "example.com"] {
             XCTAssertThrowsError(try LocalProxyClient(endpoint: endpoint))
         }
-        XCTAssertNoThrow(try LocalProxyClient(endpoint: "http://127.0.0.1:8317"))
+        let client = try LocalProxyClient(endpoint: "https://proxy.example.com/cli/")
+        XCTAssertEqual(client.baseURL.appendingPathComponent("v0/management/auth-files").absoluteString,
+                       "https://proxy.example.com/cli/v0/management/auth-files")
+        XCTAssertEqual(client.baseURL.appendingPathComponent("management.html").absoluteString,
+                       "https://proxy.example.com/cli/management.html")
+        XCTAssertFalse(client.isLoopback)
+        XCTAssertEqual(client.defaultPort, 443)
+        XCTAssertEqual(client.displayAddress, "proxy.example.com")
     }
 }

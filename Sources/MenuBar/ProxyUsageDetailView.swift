@@ -5,6 +5,7 @@ struct ProxyUsageDetailView: View {
     let usage: ProxyUsageSnapshot
     let provider: QuotaProvider
     let accountName: String
+    var interactive = true
     private let calendar = Calendar.current
     private var today: Date { calendar.startOfDay(for: Date()) }
     private var yesterday: Date { calendar.date(byAdding: .day, value: -1, to: today)! }
@@ -30,7 +31,7 @@ struct ProxyUsageDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
                 ProviderIconMono(provider: provider, size: 15, tint: provider.color)
-                Text("Proxy usage").font(.system(size: 14, weight: .bold)).foregroundStyle(provider.color)
+                Text("Usage").font(.system(size: 14, weight: .bold)).foregroundStyle(provider.color)
                 Spacer()
                 if let success = usage.successCount {
                     Text("\(compact(success)) successful").foregroundStyle(.secondary)
@@ -70,7 +71,7 @@ struct ProxyUsageDetailView: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
 
-            ProxyUsageActivityGrid(days: usage.days, startedAt: usage.startedAt, tint: provider.color)
+            ProxyUsageActivityGrid(days: usage.days, startedAt: usage.startedAt, tint: provider.color, interactive: interactive)
 
             if !models.isEmpty {
                 HStack {
@@ -105,7 +106,7 @@ struct ProxyUsageDetailView: View {
                     Text("Recorded since \(start.formatted(date: .abbreviated, time: .shortened))")
                         .foregroundStyle(.tertiary)
                 }
-                Text("Local proxy traffic only · gaps while the app is closed or asleep")
+                Text("Traffic through this proxy · gaps while the app is closed or asleep")
                     .foregroundStyle(.tertiary)
             }.font(.system(size: 10))
         }
@@ -123,53 +124,5 @@ struct ProxyUsageDetailView: View {
 
     private func compact(_ value: Int64) -> String {
         value.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)))
-    }
-}
-
-private struct ProxyUsageActivityGrid: View {
-    let days: [ProxyUsageDay]
-    let startedAt: Date?
-    let tint: Color
-    private let calendar = Calendar.current
-    private var today: Date { calendar.startOfDay(for: Date()) }
-    private var start: Date {
-        let week = calendar.dateInterval(of: .weekOfYear, for: today)!.start
-        return calendar.date(byAdding: .day, value: -175, to: week)!
-    }
-    private var maximum: Double { Double(days.map(\.tokens.total).max() ?? 0) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text("Daily activity").font(.system(size: 11, weight: .semibold))
-                Spacer()
-                Text("26 weeks").font(.system(size: 10)).foregroundStyle(.tertiary)
-            }
-            Grid(horizontalSpacing: 3, verticalSpacing: 3) {
-                ForEach(0..<7, id: \.self) { weekday in
-                    GridRow {
-                        ForEach(0..<26, id: \.self) { week in
-                            let date = calendar.date(byAdding: .day, value: week * 7 + weekday, to: start)!
-                            let day = days.first { calendar.isDate($0.date, inSameDayAs: date) }
-                            let recorded = startedAt.map { date >= calendar.startOfDay(for: $0) && date <= today } ?? false
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(cellColor(day, recorded: recorded))
-                                .frame(width: 15, height: 15)
-                                .help(date.formatted(date: .abbreviated, time: .omitted) + ": " +
-                                    (recorded ? "\(day?.tokens.total ?? 0) tokens · \(day?.requests ?? 0) requests recorded" : "No recorded history"))
-                                .accessibilityLabel(date.formatted(date: .abbreviated, time: .omitted))
-                                .accessibilityValue(recorded ? "\(day?.tokens.total ?? 0) tokens recorded" : "No recorded history")
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func cellColor(_ day: ProxyUsageDay?, recorded: Bool) -> Color {
-        guard recorded else { return Color.secondary.opacity(0.06) }
-        guard let day, day.requests > 0 else { return Color.secondary.opacity(0.14) }
-        let intensity = maximum > 0 ? log1p(Double(day.tokens.total)) / log1p(maximum) : 0
-        return tint.opacity(0.25 + 0.75 * intensity)
     }
 }

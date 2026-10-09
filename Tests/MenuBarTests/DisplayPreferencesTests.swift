@@ -32,11 +32,14 @@ final class DisplayPreferencesTests: XCTestCase {
         XCTAssertEqual(DisplayPreferences(defaults: defaults).endpoint, preferences.endpoint)
         try preferences.saveEndpoint("http://localhost:9000")
         XCTAssertEqual(changes, 1)
-        for invalid in ["", "https://example.com", "http://localhost:99999", "http://localhost:0", "http://user:secret@localhost:8317", "http://localhost:8317/path"] {
+        for invalid in ["", "ftp://example.com", "http://localhost:99999", "http://localhost:0", "http://user:secret@localhost:8317", "https://proxy.example.com?key=secret"] {
             XCTAssertThrowsError(try preferences.saveEndpoint(invalid))
             XCTAssertEqual(preferences.endpoint, "http://localhost:9000")
         }
         XCTAssertEqual(changes, 1)
+        try preferences.saveEndpoint("https://proxy.example.com/cli")
+        XCTAssertEqual(DisplayPreferences(defaults: defaults).endpoint, "https://proxy.example.com/cli")
+        XCTAssertEqual(changes, 2)
     }
 
     @MainActor

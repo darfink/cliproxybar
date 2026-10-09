@@ -125,16 +125,19 @@ final class ProxyUsageTests: XCTestCase {
             toggleProxy: {}, toggleTunnel: { _ in }, copyText: { _ in }, switchAntigravityAccount: { _ in }, isAntigravityIDERunning: { false },
             confirmAntigravitySwitch: { _, _ in false }, selectProvider: { _ in }, settings: {}, openApp: {}, quit: {}, menuNeedsRebuild: {}))
         for expanded in [false, true] {
-            let menu = StatusBarMenuRenderer(snapshot: snapshot, commands: commands, expanded: expanded).buildMenu()
-            let submenu = try XCTUnwrap(menu.items.first { $0.submenu != nil }?.submenu)
-            let view = try XCTUnwrap(submenu.items.first?.view)
+            let renderer = StatusBarMenuRenderer(snapshot: snapshot, commands: commands, expanded: expanded)
+            let menu = renderer.buildMenu()
+            XCTAssertEqual(renderer.usageHoverController.accountCount, 1)
+            XCTAssertFalse(menu.items.contains { $0.submenu != nil })
+            let view = NSHostingView(rootView: ProxyUsageDetailView(usage: usage, provider: .codex, accountName: "example@example.com").frame(width: 520))
+            view.setFrameSize(view.intrinsicContentSize)
             XCTAssertEqual(view.frame.width, 520)
             XCTAssertGreaterThan(view.frame.height, 250)
             XCTAssertLessThan(view.frame.height, 600)
         }
         // Optional developer preview uses fixture data only, never live identities.
         if let path = ProcessInfo.processInfo.environment["CLIPROXYBAR_USAGE_PREVIEW"] {
-            let renderer = ImageRenderer(content: ProxyUsageDetailView(usage: usage, provider: .codex, accountName: "example@example.com")
+            let renderer = ImageRenderer(content: ProxyUsageDetailView(usage: usage, provider: .codex, accountName: "example@example.com", interactive: false)
                 .frame(width: 520).background(Color(nsColor: .windowBackgroundColor)).environment(\.colorScheme, .dark))
             renderer.scale = 2
             let image = try XCTUnwrap(renderer.cgImage)

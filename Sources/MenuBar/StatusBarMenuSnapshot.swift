@@ -51,4 +51,5 @@ public struct StatusBarMenuSnapshot: Equatable, Sendable {
     let displaySettings: StatusBarMenuDisplaySettings
     let appearanceMode: AppearanceMode
     let language: AppLanguage
+    var proxyAddress: String? = nil
 }

@@ -5,7 +5,7 @@
 <h1 align="center">CLIProxyBar</h1>
 <p align="center">Your CLIProxyAPI quotas, at a glance. A standalone macOS menu bar app.</p>
 
-CLIProxyBar connects to your local CLIProxyAPI instance and shows quota usage for each account.
+CLIProxyBar connects to your local or remote CLIProxyAPI instance and shows quota usage for each account.
 A compact menu keeps the essentials close. Option-click opens an expanded view with reset times and pace indicators.
 
 ## Screenshots
@@ -31,7 +31,7 @@ Email addresses are blurred. The expanded screenshot shows the earlier app label
 - Cached readings at launch, followed by fresh provider requests.
 - Account hover panels with optional token history, model totals, and daily activity.
 - One refresh action, a refresh indicator inside the menu, and the ⌘R shortcut.
-- Local proxy URL and management key settings, available with ⌘,.
+- Local or remote proxy URL and management key settings, available with ⌘,.
 
 ## Supported quotas
 
@@ -52,11 +52,11 @@ Unsupported providers can appear as accounts without active quota readings.
 ## Requirements
 
 - macOS 14 Sonoma or later, on Apple Silicon or Intel.
-- A local CLIProxyAPI instance with management access enabled.
+- A CLIProxyAPI instance with management access enabled.
 - Your CLIProxyAPI management key. This key is different from a client API key.
 - Accounts already configured in CLIProxyAPI.
 
-CLIProxyBar displays quotas and opens local management. CLIProxyAPI manages the provider accounts and proxy service.
+CLIProxyBar displays quotas and opens the management dashboard. CLIProxyAPI manages the provider accounts and proxy service.
 
 ## Install
 
@@ -64,10 +64,14 @@ CLIProxyBar displays quotas and opens local management. CLIProxyAPI manages the 
 2. Extract the ZIP.
 3. Move `CLIProxyBar.app` into Applications.
 4. Open the app.
-5. Enter the local proxy URL and management key in Settings.
+5. Enter the proxy URL and management key in Settings.
 6. Click **Apply** for the URL, then **Save** for the key.
 
-The default URL is `http://127.0.0.1:8317`. The app opens Settings on first launch when no management key exists.
+The default URL is `http://127.0.0.1:8317`.
+Remote HTTP and HTTPS servers are supported, including reverse-proxy path prefixes such as `https://proxy.example.com/cli`.
+For remote connections, enable `remote-management.allow-remote` on CLIProxyAPI and use its management key.
+Use HTTPS to protect the key in transit. HTTPS uses normal certificate validation.
+The app opens Settings on first launch when no management key exists.
 
 The default release has an ad hoc signature. It has no Apple notarization.
 If macOS blocks the downloaded app, open **System Settings → Privacy & Security** and select **Open Anyway** after attempting to open it.
@@ -80,13 +84,13 @@ If macOS blocks the downloaded app, open **System Settings → Privacy & Securit
 | Option-click the menu bar item | Open the expanded menu |
 | ⌘R or Refresh | Fetch quotas for all supported accounts |
 | ⌘, or Settings | Change the display, visible providers, proxy URL, or management key |
-| Hover over an account | Show proxy usage and token history |
-| Open Local Management | Open your proxy's management page in the browser |
+| Hover over an account | Show usage and token history |
+| Open Management | Open your proxy's management page in the browser |
 
 Automatic refresh runs every five minutes. A failed request retains the previous reading and shows its status.
 The browser management page handles its own authentication. CLIProxyBar does not put the management key in browser URLs.
 
-## Proxy usage history
+## Usage history
 
 1. Open **Settings** with ⌘,.
 2. Enable **Collect token usage**.
@@ -101,6 +105,10 @@ usage-statistics-enabled: true
 
 The panel shows recorded token totals for today, yesterday, and the last 30 days.
 It includes input, output, cache, and reasoning counters, an activity grid, and totals by model.
+The panel aligns with the hovered account. A colored pointer identifies the account when screen bounds shift the panel.
+Each activity square represents one day. Month and weekday labels orient the 26-week grid.
+Today has a colored border. Upcoming days have dashed outlines, and days before collection have a faint fill.
+Hover over a square to see its date, recorded tokens, requests, and failures.
 Available token fields depend on the provider. Request counters come from CLIProxyAPI.
 
 Collection runs every 15 seconds while CLIProxyBar runs. The app saves daily summaries for up to one year.
@@ -114,7 +122,7 @@ The proxy's statistics setting stays enabled for other tools.
 
 ## Privacy
 
-The app accepts HTTP loopback URLs only: `localhost`, `127.0.0.1`, or `[::1]`.
+The app accepts local or remote HTTP and HTTPS URLs. URLs cannot contain credentials, queries, or fragments.
 It refuses redirects for management requests. It stores the management key in macOS Keychain.
 Provider quota requests go through CLIProxyAPI with the selected account. The app does not read provider token files directly.
 
