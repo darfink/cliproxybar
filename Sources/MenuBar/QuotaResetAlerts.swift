@@ -29,15 +29,27 @@ final class QuotaResetAlerts: NSObject, UNUserNotificationCenterDelegate {
 
     func updateAuthorization(requestIfNeeded: Bool = false) async {
         guard let center else { return }
-        authorizationStatus = await center.notificationSettings().authorizationStatus
+        authorizationStatus = await currentAuthorizationStatus()
         guard requestIfNeeded, authorizationStatus == .notDetermined, !requestingPermission else { return }
         requestingPermission = true
         defer { requestingPermission = false }
         do {
             _ = try await center.requestAuthorization(options: [.alert, .sound])
-            authorizationStatus = await center.notificationSettings().authorizationStatus
+            authorizationStatus = await currentAuthorizationStatus()
             issue = nil
         } catch { issue = "macOS could not enable reset notifications. Try again in Settings." }
+    }
+
+    private func currentAuthorizationStatus() async -> UNAuthorizationStatus {
+        guard let center else { return .notDetermined }
+        // Older SDKs do not mark UNNotificationSettings as Sendable. Extract
+        // the scalar in its callback instead of moving the object across actors.
+        let rawValue: Int = await withCheckedContinuation { continuation in
+            center.getNotificationSettings { settings in
+                continuation.resume(returning: settings.authorizationStatus.rawValue)
+            }
+        }
+        return UNAuthorizationStatus(rawValue: rawValue) ?? .notDetermined
     }
 
     func previewConfetti() {

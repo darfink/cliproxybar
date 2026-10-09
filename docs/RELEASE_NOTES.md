@@ -1,4 +1,4 @@
-CLIProxyBar 0.3.0 adds configurable quota reset alerts:
+CLIProxyBar 0.3.1 adds configurable quota reset alerts:
 
 - Settings has separate notifications for session/rolling resets and weekly/monthly resets.
 - Weekly and monthly resets can play a short confetti animation, independently of notifications. A Preview button shows the effect.
