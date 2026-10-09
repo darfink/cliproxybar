@@ -6,9 +6,11 @@ import CLIProxyBarCore
 final class SettingsWindow {
     private var window: NSWindow?
     private let preferences: DisplayPreferences
+    private let updater: AppUpdater
     private let onKeySaved: () -> Void
-    init(preferences: DisplayPreferences, onKeySaved: @escaping () -> Void) {
+    init(preferences: DisplayPreferences, updater: AppUpdater, onKeySaved: @escaping () -> Void) {
         self.preferences = preferences
+        self.updater = updater
         self.onKeySaved = onKeySaved
     }
 
@@ -17,7 +19,7 @@ final class SettingsWindow {
             let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 610), styleMask: [.titled, .closable], backing: .buffered, defer: false)
             panel.title = "CLIProxyBar Settings"
             panel.isReleasedWhenClosed = false
-            panel.contentView = NSHostingView(rootView: DisplaySettingsView(preferences: preferences, onKeySaved: onKeySaved, close: { [weak panel] in panel?.close() }))
+            panel.contentView = NSHostingView(rootView: DisplaySettingsView(preferences: preferences, updater: updater, onKeySaved: onKeySaved, close: { [weak panel] in panel?.close() }))
             panel.center()
             window = panel
         }
@@ -28,6 +30,7 @@ final class SettingsWindow {
 
 private struct DisplaySettingsView: View {
     @Bindable var preferences: DisplayPreferences
+    @Bindable var updater: AppUpdater
     let onKeySaved: () -> Void
     let close: () -> Void
     @State private var endpointDraft = ""
@@ -114,6 +117,20 @@ private struct DisplaySettingsView: View {
                     }
                     Text(keyMessage).font(.caption)
                         .foregroundStyle(keyFailed ? Color.red : Color.secondary)
+                    Divider()
+                    Text("App updates").font(.headline)
+                    Toggle("Automatically check for updates", isOn: $updater.automaticallyChecksForUpdates)
+                        .toggleStyle(.checkbox)
+                    Toggle("Automatically download and install updates", isOn: $updater.automaticallyInstallsUpdates)
+                        .toggleStyle(.checkbox)
+                        .disabled(!updater.automaticallyChecksForUpdates)
+                    HStack {
+                        Text("Signed updates from GitHub Releases.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Check for Updates…", action: updater.checkForUpdates)
+                            .disabled(!updater.canCheckForUpdates)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 2)

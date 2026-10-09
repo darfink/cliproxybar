@@ -37,19 +37,28 @@ jobs:
           echo "APP_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
           echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
       - name: Run tests
-        run: swift test
+        run: |
+          python3 -m unittest discover -s scripts/tests -v
+          swift test
       - name: Build universal app
         run: |
           ./build.sh --universal
           lipo dist/CLIProxyBar.app/Contents/MacOS/CLIProxyBar -verify_arch arm64 x86_64
       - name: Package app and checksum
         run: ./scripts/package-release.sh
+      - name: Sign update archive and feed
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          test -n "$SPARKLE_PRIVATE_KEY"
+          ./scripts/generate-appcast.sh
       - uses: actions/upload-artifact@v7
         with:
           name: release
           path: |
             dist/*.zip
             dist/*.sha256
+            dist/appcast.xml
           if-no-files-found: error
           retention-days: 7
 
@@ -78,8 +87,13 @@ jobs:
           set -euo pipefail
           (cd dist && sha256sum --check ./*.sha256)
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" dist/*.zip dist/*.sha256 --clobber
+            gh release upload "$RELEASE_TAG" dist/*.zip dist/*.sha256 dist/appcast.xml --clobber
           else
-            gh release create "$RELEASE_TAG" dist/*.zip dist/*.sha256 \
+            gh release create "$RELEASE_TAG" dist/*.zip dist/*.sha256 dist/appcast.xml \
               --verify-tag --title "CLIProxyBar ${RELEASE_TAG#v}" --notes-file docs/RELEASE_NOTES.md
           fi
+      - name: Update same-repository Homebrew cask
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: python3 scripts/update-homebrew.py "$RELEASE_TAG" "dist/CLIProxyBar-${RELEASE_TAG#v}-macOS-universal.zip.sha256" --publish

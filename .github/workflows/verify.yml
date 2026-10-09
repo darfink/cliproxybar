@@ -30,6 +30,7 @@ jobs:
         run: |
           for script in build.sh scripts/*.sh; do bash -n "$script"; done
           plutil -lint Info.plist
+          ruby -c Casks/cliproxybar.rb
           swift --version
       - name: Test, build, and package
         run: ./scripts/verify.sh

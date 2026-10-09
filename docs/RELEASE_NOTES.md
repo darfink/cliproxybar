@@ -1,8 +1,12 @@
-CLIProxyBar 0.2.3 fixes interaction with the Usage card:
+CLIProxyBar 0.2.4 makes installation and updates easier:
 
-- Click **Tokens** or **Requests** without closing the Usage card or the main menu.
-- Native submenus keep the card beside its account and handle mouse clicks, hover navigation, and dismissal.
-- **⌘R** also refreshes quotas from inside the Usage card.
+- Install with the Homebrew command in the README. The tap lives in the app repository.
+- Sparkle checks GitHub Releases for updates and verifies signatures before installation.
+- **Settings → App updates** includes a manual check and options for automatic checks and installation.
+- Automatic checks are enabled by default. Automatic installation is disabled by default.
+- Each release updates the Homebrew cask's version and checksum automatically.
+
+Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in updater.
 
 CLIProxyAPI records request usage. CLIProxyBar collects these events and saves daily summaries locally while the app runs.
 The usage queue retains events for about a minute. Closing the app or sleep can create gaps in recorded history.

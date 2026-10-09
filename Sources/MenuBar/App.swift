@@ -39,7 +39,8 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     var client: LocalProxyClient
     let statusBar = StatusBarManager()
     let preferences = DisplayPreferences()
-    lazy var settingsWindow = SettingsWindow(preferences: preferences, onKeySaved: { [weak self] in
+    let updater = AppUpdater()
+    lazy var settingsWindow = SettingsWindow(preferences: preferences, updater: updater, onKeySaved: { [weak self] in
         self?.applyEndpoint()
     })
     var commands: StatusBarCommandDispatcher!
@@ -64,6 +65,17 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         } catch { message = "Saved readings could not be loaded. Fetching fresh quotas…" }
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if CommandLine.arguments.contains("--smoke-updater-test") {
+            guard !updater.automaticallyChecksForUpdates else {
+                print("Pass -SUEnableAutomaticChecks NO for the updater diagnostic.")
+                exit(1)
+            }
+            updater.start()
+            print("Updater initialized: \(updater.canCheckForUpdates)")
+            exit(updater.canCheckForUpdates ? 0 : 1)
+        }
+        let isDiagnostic = CommandLine.arguments.contains { ["--smoke-test", "--smoke-cache-test"].contains($0) }
+        if !isDiagnostic { updater.start() }
         preferences.onChange = { [weak self] in self?.render() }
         preferences.onEndpointChange = { [weak self] in self?.applyEndpoint() }
         preferences.onUsageTrackingChange = { [weak self] in self?.applyUsageTracking() }

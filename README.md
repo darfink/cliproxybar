@@ -78,12 +78,25 @@ CLIProxyBar displays quotas and opens the management dashboard. CLIProxyAPI mana
 
 ## Install
 
-1. Download the macOS ZIP from [Releases](https://github.com/darfink/cliproxybar/releases).
+With [Homebrew](https://brew.sh) installed, paste this command:
+
+```sh
+brew tap darfink/cliproxybar https://github.com/darfink/cliproxybar.git && brew install --cask darfink/cliproxybar/cliproxybar && open -a CLIProxyBar
+```
+
+The tap lives in this repository, beside the app source. Each release updates its version and SHA-256 checksum automatically.
+
+<details>
+<summary>Install without Homebrew</summary>
+
+1. Download the universal macOS ZIP from [Releases](https://github.com/darfink/cliproxybar/releases/latest).
 2. Extract the ZIP.
 3. Move `CLIProxyBar.app` into Applications.
 4. Open the app.
-5. Enter the proxy URL and management key in Settings.
-6. Click **Apply** for the URL, then **Save** for the key.
+
+</details>
+
+Enter your proxy URL and management key in Settings. Click **Apply** for the URL, then **Save** for the key.
 
 The default URL is `http://127.0.0.1:8317`.
 Remote HTTP and HTTPS servers are supported, including reverse-proxy path prefixes such as `https://proxy.example.com/cli`.
@@ -93,6 +106,24 @@ The app opens Settings on first launch when no management key exists.
 
 The default release has an ad hoc signature. It has no Apple notarization.
 If macOS blocks the downloaded app, open **System Settings → Privacy & Security** and select **Open Anyway** after attempting to open it.
+
+## Keep up to date
+
+CLIProxyBar checks GitHub Releases for app updates through [Sparkle](https://sparkle-project.org).
+Open **Settings → App updates** to check manually or change the update options.
+Automatic checks are enabled by default. Automatic downloads and installation are optional and disabled by default.
+Sparkle verifies signatures on the update feed and downloaded archive before installation.
+
+Homebrew users can also update from Terminal:
+
+```sh
+brew update && brew upgrade --cask --greedy darfink/cliproxybar/cliproxybar
+```
+
+The `--greedy` option includes apps that have their own updater.
+Quit CLIProxyBar before a Homebrew upgrade, then open it again after the upgrade.
+Settings, the management key, and recorded usage remain available after an update.
+Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in updater.
 
 ## Use
 
@@ -123,7 +154,7 @@ usage-statistics-enabled: true
 
 The panel shows recorded token totals for today, yesterday, and the last 30 days.
 It includes input, output, cache, and reasoning counters, an activity grid, and totals by model.
-The panel aligns with the hovered account. A colored pointer identifies the account when screen bounds shift the panel.
+The panel aligns with the hovered account and stays within the screen.
 Each activity square represents one day. Month and weekday labels orient the 26-week grid.
 Today has a colored border. Upcoming days have dashed outlines, and days before collection have a faint fill.
 Choose **Tokens** or **Requests** to compare daily activity.
@@ -151,7 +182,8 @@ The quota cache contains account display names, quota values, and timestamps. It
 The cache lives at `~/Library/Application Support/CLIProxyBar/quota-cache.json`, with owner-only permissions.
 Optional usage history lives in the same directory, in a separate file for each proxy URL.
 It stores daily counters, model names, and hashed account identifiers. It excludes raw events, keys, headers, and response bodies.
-The app includes no telemetry or automatic updater.
+The app includes no telemetry. Sparkle contacts GitHub to check for app updates and download them.
+Update checks do not send your proxy URL, management key, account names, or usage history.
 
 ## Build from source
 
@@ -173,15 +205,16 @@ For a universal app, run:
 ```
 
 The build accepts SwiftPM flags. Restricted development environments can pass `--disable-sandbox` and specify writable Swift module caches.
-The app has no external Swift package dependencies.
+Swift Package Manager downloads Sparkle, the app's update framework. The build script embeds it in the app bundle.
 
 ## Development and releases
 
 [CONTRIBUTING.md](CONTRIBUTING.md) describes tests and development.
 [docs/RELEASING.md](docs/RELEASING.md) describes GitHub Releases and optional Apple signing.
 GitHub Actions runs tests and builds on Apple Silicon and Intel.
-Version tags trigger a verified universal app build, ZIP packaging, checksums, and a GitHub Release.
-Dependabot checks GitHub Actions weekly.
+Version tags trigger a verified universal app build, ZIP packaging, checksums, a signed update feed, and a GitHub Release.
+The release workflow also updates the Homebrew cask in this repository.
+Dependabot checks GitHub Actions and Swift dependencies weekly.
 
 Existing users of the extracted Quotio Menu Bar keep their display settings, cached readings, and management key during migration.
 The app preserves the legacy Keychain item.

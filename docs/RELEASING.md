@@ -11,11 +11,33 @@
 7. Inspect the Release workflow in GitHub Actions.
 
 The workflow runs tests and builds an app for Apple Silicon and Intel.
-The release contains a universal ZIP and its SHA-256 checksum.
+The release contains a universal ZIP, its SHA-256 checksum, and a signed Sparkle feed named `appcast.xml`.
 Only the publication job has permission to write release assets.
+After publication, that job updates `Casks/cliproxybar.rb` on `main` through the GitHub API.
+The cask always refers to a published universal archive. Re-running an older release cannot downgrade the cask.
 For a failed publication, run the Release workflow manually with the existing tag.
 
 The default release has an ad hoc signature. It has no Apple notarization and requires macOS approval after download.
+
+## Update signing
+
+Sparkle 2.10 or later verifies both the update feed and the ZIP with Ed25519 signatures.
+The public key is in `Info.plist`. GitHub Actions uses the `SPARKLE_PRIVATE_KEY` repository secret to sign updates.
+The signing key also lives in the maintainer's macOS Keychain under the account `io.github.darfink.CLIProxyBar`.
+Keep a secure backup of this key. Losing it prevents updates to existing installations without the current Developer ID signing setup.
+Never commit the private key or include it in release assets.
+
+To generate and verify the feed locally, package a universal app first:
+
+```sh
+./build.sh --universal
+./scripts/package-release.sh
+./scripts/generate-appcast.sh
+```
+
+The script uses the Keychain key locally. CI supplies the secret through standard input to Sparkle's signing tools.
+The app reads the feed from the latest GitHub Release. A separate server is not required.
+The existing notarization instructions still apply. Sparkle signatures do not replace Apple notarization.
 
 ## Test menu interaction
 
