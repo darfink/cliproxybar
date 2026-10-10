@@ -212,7 +212,7 @@ struct ProxyUsageActivityGrid: View {
                 .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(border, style: StrokeStyle(lineWidth: 1, dash: dashed ? [2, 2] : [])))
                 .frame(width: 9, height: 9)
                 .overlay {
-                    if today { UsageTodayRing(tint: tint, lowActivity: true, inset: 1.5, lineWidth: 0.75) }
+                    if today { UsageTodayRing(tint: tint, lowActivity: true, cornerRadius: 2, lineWidth: 1.25) }
                 }
             Text(text).foregroundStyle(.secondary)
         }
@@ -222,16 +222,15 @@ struct ProxyUsageActivityGrid: View {
 private struct UsageTodayRing: View {
     let tint: Color
     var lowActivity = false
-    var inset: CGFloat = 2
-    var lineWidth: CGFloat = 1
+    var cornerRadius: CGFloat = 3
+    var lineWidth: CGFloat = 1.5
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 1.5)
+        RoundedRectangle(cornerRadius: cornerRadius)
             .strokeBorder(colorScheme == .light && lowActivity ? tint.opacity(0.65)
                           : Color.white.opacity(colorScheme == .dark ? 0.65 : 0.8),
                           lineWidth: lineWidth)
-            .padding(inset)
             .allowsHitTesting(false)
     }
 }

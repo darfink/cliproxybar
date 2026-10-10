@@ -4,19 +4,23 @@ import CLIProxyBarCore
 
 /// The backend owns provider credentials and quota capability discovery.
 enum PluginQuotaParser {
-    static func providers(_ data: Data) throws -> Set<String> {
+    static func registry(_ data: Data) throws -> QuotaProviderRegistry {
         struct Envelope: Decodable {
             struct Entry: Decodable {
+                let plugin_id: String?
                 let provider: String
+                let display_name: String?
                 let supported_providers: [String]?
+                let supports_reset: Bool?
             }
             let providers: [Entry]?
         }
         let response = try JSONDecoder().decode(Envelope.self, from: data)
-        return Set((response.providers ?? []).flatMap {
-            ($0.supported_providers?.isEmpty == false ? $0.supported_providers! : [$0.provider])
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
-        })
+        return QuotaProviderRegistry(entries: (response.providers ?? []).map {
+            RegisteredQuotaProvider(pluginID: text($0.plugin_id), provider: QuotaProviderRegistry.normalize($0.provider),
+                displayName: text($0.display_name), supportedProviders: ($0.supported_providers ?? [])
+                    .map(QuotaProviderRegistry.normalize).filter { !$0.isEmpty }, supportsReset: $0.supports_reset ?? false)
+        }.filter { !$0.identifiers.isEmpty })
     }
 
     static func number(_ raw: Any?) -> Double? {
@@ -24,53 +28,91 @@ enum PluginQuotaParser {
         return value.doubleValue
     }
 
+    static func text(_ values: Any?...) -> String? {
+        for raw in values {
+            if let value = raw as? String {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        return nil
+    }
+
     static func parse(_ data: Data, provider: String, now: Date = Date()) throws -> ProviderQuota {
-        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any], root["error"] == nil else { throw LocalClientError.noQuotaData }
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any], root["error"] == nil else {
+            throw LocalClientError.noQuotaData
+        }
         let subscription = root["subscription"] as? [String: Any] ?? [:]
+        let plan = text(subscription["plan"], subscription["tierName"], subscription["tier_name"],
+                        subscription["tierId"], subscription["tier_id"])
         let offset = number(root["serverTimeOffsetMs"] ?? root["server_time_offset_ms"]) ?? 0
         var models: [QuotaMetric] = []
         var occurrences: [String: Int] = [:]
-        for (groupIndex, group) in (root["groups"] as? [[String: Any]] ?? []).enumerated() {
-            let groupName = group["displayName"] as? String ?? group["display_name"] as? String ?? ""
-            for bucket in group["buckets"] as? [[String: Any]] ?? [] {
-                guard let remaining = number(bucket["remainingFraction"] ?? bucket["remaining_fraction"]), (0...1).contains(remaining) else { continue }
-                let window = bucket["window"] as? String ?? ""
-                let groupID = groupName.isEmpty ? String(groupIndex) : ProxyUsageHistory.digest(groupName)
-                let identity = groupID + ":" + window
+        var invalidReadings = false
+        for field in ["groups", "summary"] {
+            if let value = root[field], !(value is NSNull), !(value is [[String: Any]]) { throw LocalClientError.noQuotaData }
+        }
+        for group in root["groups"] as? [[String: Any]] ?? [] {
+            let groupName = text(group["displayName"], group["display_name"]) ?? ""
+            if let value = group["buckets"], !(value is NSNull), !(value is [[String: Any]]) { throw LocalClientError.noQuotaData }
+            let buckets = group["buckets"] as? [[String: Any]] ?? []
+            // Unnamed groups can be distinguished by their labels, never by a reading
+            // or reset date. Identical unlabeled groups have no stable backend identity.
+            let groupKey = groupName.isEmpty ? buckets.map {
+                (text($0["window"]) ?? "") + "\n" + (text($0["description"]) ?? "")
+            }.sorted().joined(separator: "\n") : groupName
+            let groupID = ProxyUsageHistory.digest(groupKey)
+            let counts = Dictionary(grouping: buckets, by: { text($0["window"]) ?? "" }).mapValues(\.count)
+            for bucket in buckets {
+                guard let remaining = number(bucket["remainingFraction"] ?? bucket["remaining_fraction"]), (0...1).contains(remaining) else {
+                    invalidReadings = true
+                    continue
+                }
+                let window = text(bucket["window"]) ?? ""
+                let description = text(bucket["description"])
+                let duplicateWindow = (counts[window] ?? 0) > 1
+                let identity = groupID + ":" + window + ":" + (description ?? "")
                 let occurrence = occurrences[identity, default: 0]
                 occurrences[identity] = occurrence + 1
-                let name = provider == "opencode-go" && ["rolling", "weekly", "monthly"].contains(window)
-                    ? "opencode-go-" + window : "plugin:\(groupID):\(occurrence):\(window)"
+                let bucketID = ProxyUsageHistory.digest(identity) + ":" + String(occurrence)
+                let isOpenCode = QuotaProviderRegistry.normalize(provider) == "opencode-go"
+                let name = isOpenCode && ["rolling", "weekly", "monthly"].contains(window)
+                    ? "opencode-go-" + window : "plugin:\(groupID):\(bucketID):\(window)"
                 guard !models.contains(where: { $0.name == name }) else { continue }
                 let windowLabel = window.split(whereSeparator: { $0 == "-" || $0 == "_" }).map { $0.capitalized }.joined(separator: " ")
-                let label = provider == "opencode-go" ? windowLabel : [groupName, windowLabel].filter { !$0.isEmpty }.joined(separator: " · ")
-                var reset = bucket["resetTime"] as? String ?? bucket["reset_time"] as? String ?? ""
-                let resetDate = ProxyAccount.observationDate(reset)
-                if offset != 0, resetDate != .distantPast { reset = ISO8601DateFormatter().string(from: resetDate.addingTimeInterval(-offset / 1000)) }
-                // A rolling or monthly label does not establish a fixed duration.
-                let duration: TimeInterval? = switch window.lowercased() {
-                case "daily": 86400
-                case "weekly": 604800
-                case "five-hour", "five-hour-session", "5h": 18000
-                default: nil
-                }
+                let bucketLabel: String
+                if duplicateWindow {
+                    bucketLabel = description.map { $0 + (occurrence == 0 ? "" : " (\(occurrence + 1))") }
+                        ?? (windowLabel.isEmpty ? "Quota" : windowLabel) + " \(occurrence + 1)"
+                } else { bucketLabel = windowLabel }
+                let label = isOpenCode ? windowLabel : [groupName, bucketLabel].filter { !$0.isEmpty }.joined(separator: " · ")
+                let rawReset = text(bucket["resetTime"], bucket["reset_time"])
+                let resetDate = ProxyAccount.observationDate(rawReset)
+                let reset = resetDate == .distantPast ? "" : ISO8601DateFormatter()
+                    .string(from: resetDate.addingTimeInterval(-offset / 1000))
+                // The generic contract does not describe fixed versus rolling windows.
+                // OpenCode Go's weekly limit is known; unfamiliar plugins get no guessed pace.
+                let duration: TimeInterval? = isOpenCode && window == "weekly" ? 604800 : nil
                 models.append(QuotaMetric(name: name, percentage: remaining * 100, resetTime: reset,
-                    tooltip: bucket["description"] as? String, windowDuration: duration, label: label.isEmpty ? "Quota" : label))
+                    tooltip: description, windowDuration: duration, label: label.isEmpty ? "Quota" : label))
             }
         }
-        for (index, summary) in (root["summary"] as? [[String: Any]] ?? []).enumerated() {
-            guard let value = number(summary["value"]), let label = summary["label"] as? String, !label.isEmpty else { continue }
-            let text: String
-            if summary["format"] as? String == "currency", let currency = summary["currency"] as? String,
-               currency.count == 3, currency.allSatisfy({ $0.isASCII && $0.isLetter }) {
-                text = value.formatted(.currency(code: currency))
-            } else {
-                text = [value.formatted(.number.precision(.fractionLength(0...2))), summary["unit"] as? String ?? ""].filter { !$0.isEmpty }.joined(separator: " ")
+        var summaryKeys: Set<String> = []
+        for summary in root["summary"] as? [[String: Any]] ?? [] {
+            guard let value = number(summary["value"]), let key = text(summary["key"]), let label = text(summary["label"]) else {
+                invalidReadings = true
+                continue
             }
-            models.append(QuotaMetric(name: "plugin-summary:\(index)", percentage: -1, resetTime: "", presentation: .status(text: text), label: label))
+            guard summaryKeys.insert(key).inserted else { continue }
+            let code = text(summary["currency"])?.uppercased()
+            let currency = summary["format"] as? String == "currency" && code?.count == 3
+                && code?.allSatisfy({ $0.isASCII && $0.isLetter }) == true ? code : nil
+            models.append(QuotaMetric(name: "plugin-summary:" + ProxyUsageHistory.digest(key), percentage: -1, resetTime: "",
+                label: label, summary: QuotaSummaryValue(key: key, value: value, unit: text(summary["unit"]), currency: currency)))
         }
-        guard !models.isEmpty else { throw LocalClientError.noQuotaData }
-        return ProviderQuota(models: models, lastUpdated: now,
-            planType: subscription["plan"] as? String ?? subscription["tierName"] as? String ?? subscription["tier_name"] as? String)
+        // Successful responses can contain only a subscription or no current limits.
+        // Invalid numbers still stay unknown instead of becoming zero consumption.
+        if models.isEmpty && plan == nil && invalidReadings { throw LocalClientError.noQuotaData }
+        return ProviderQuota(models: models, lastUpdated: now, planType: plan)
     }
 }

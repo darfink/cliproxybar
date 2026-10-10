@@ -82,7 +82,7 @@ private struct DisplaySettingsView: View {
                     Text("Providers in the menu bar").font(.headline)
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(preferences.availableProviders) { provider in
-                            Toggle(provider.displayName, isOn: Binding(
+                            Toggle(preferences.providerName(provider), isOn: Binding(
                                 get: { preferences.showsInMenuBar(provider) },
                                 set: { preferences.setMenuBarVisible($0, for: provider) }
                             ))

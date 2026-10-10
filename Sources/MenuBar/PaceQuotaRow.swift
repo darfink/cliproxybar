@@ -13,8 +13,11 @@ struct PaceQuotaRow: View {
         let percent = displayMode.displayValue(from: metric.percentage)
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline) {
-                Text(metric.displayName + " " + (percent < 0 ? "—" : "\(Int(percent.rounded()))%") + (displayMode == .used ? " used" : " left"))
-                    .font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                Text(metric.displayName).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                    .help(metric.tooltip ?? metric.displayName)
+                Text((percent < 0 ? "—" : "\(Int(percent.rounded()))%") + (displayMode == .used ? " used" : " left"))
+                    .font(.system(size: 12, weight: .semibold)).monospacedDigit().lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                 Spacer(minLength: 5)
                 if !metric.resetTime.isEmpty {
                     Text("Resets in " + metric.formattedResetTime)

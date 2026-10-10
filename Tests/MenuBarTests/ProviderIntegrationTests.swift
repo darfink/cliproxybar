@@ -61,8 +61,8 @@ final class ProviderIntegrationTests: XCTestCase {
     }
 
     func testResetClassificationUsesKnownWindowsAndLeavesUnfamiliarWindowsAlone() {
-        XCTAssertEqual(QuotaResetKind.classify("plugin:0:0:rolling"), .short)
-        XCTAssertEqual(QuotaResetKind.classify("plugin:1:0:weekly"), .long)
+        XCTAssertNil(QuotaResetKind.classify("plugin:0:0:rolling"))
+        XCTAssertNil(QuotaResetKind.classify("plugin:1:0:weekly"))
         XCTAssertEqual(QuotaResetKind.classify("antigravity-gemini-session"), .short)
         XCTAssertNil(QuotaResetKind.classify("plugin:0:0:custom-period"))
         XCTAssertEqual(QuotaResetKind.label("plugin:0:0:monthly"), "Monthly")
@@ -75,10 +75,10 @@ final class ProviderIntegrationTests: XCTestCase {
             return (200, #"{"providers":[{"provider":"quota-implementation","supported_providers":["first","second"]},{"provider":"third"}]}"#)
         }
         let providers = try await client.fetchQuotaProviders()
-        XCTAssertEqual(providers, ["first", "second", "third"])
+        XCTAssertEqual(providers.identifiers, ["quota-implementation", "first", "second", "third"])
         let older = try self.client { _ in (404, "") }
         let missing = try await older.fetchQuotaProviders()
-        XCTAssertTrue(missing.isEmpty)
+        XCTAssertTrue(missing.identifiers.isEmpty)
         let unauthorized = try self.client { _ in (401, "") }
         do { _ = try await unauthorized.fetchQuotaProviders(); XCTFail("Unauthorized discovery must be reported") }
         catch LocalClientError.http(let status) { XCTAssertEqual(status, 401) }
@@ -99,7 +99,7 @@ final class ProviderIntegrationTests: XCTestCase {
         XCTAssertEqual(quota.models.map(\.displayName), ["Fast · Daily", "Deep · Daily"])
         XCTAssertEqual(Set(quota.models.map(\.id)).count, 2)
         XCTAssertEqual(quota.planType, "Team")
-        XCTAssertEqual(quota.models.map(\.windowDuration), [86400, 86400])
+        XCTAssertTrue(quota.models.allSatisfy { $0.windowDuration == nil })
     }
 
     func testAccountCapabilityWorksWithoutDiscovery() async throws {

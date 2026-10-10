@@ -23,12 +23,19 @@ final class DisplayPreferences {
     private(set) var endpoint: String
     private(set) var hiddenMenuBarProviders: Set<String>
     private(set) var availableProviders: [QuotaProvider] = QuotaProvider.allCases.filter { ActiveQuotaParser.supports($0.rawValue) }
+    private(set) var providerNames: [QuotaProvider: String] = [:]
 
     func updateAvailableProviders(_ accounts: [ProxyAccount]) {
+        providerNames = Dictionary(accounts.compactMap { account -> (QuotaProvider, String)? in
+            guard let provider = QuotaProvider(rawValue: account.provider), let name = account.providerDisplayName else { return nil }
+            return (provider, name)
+        }, uniquingKeysWith: { first, _ in first })
         let configured = accounts.compactMap { QuotaProvider(rawValue: $0.provider) }
         let builtIn = QuotaProvider.allCases.filter { ActiveQuotaParser.supports($0.rawValue) }
-        availableProviders = Set(configured + builtIn).sorted { $0.displayName < $1.displayName }
+        availableProviders = Set(configured + builtIn).sorted { providerName($0) < providerName($1) }
     }
+
+    func providerName(_ provider: QuotaProvider) -> String { providerNames[provider] ?? provider.displayName }
 
     func showsInMenuBar(_ provider: QuotaProvider) -> Bool {
         !hiddenMenuBarProviders.contains(provider.rawValue)

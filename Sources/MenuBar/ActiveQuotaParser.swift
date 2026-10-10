@@ -6,7 +6,8 @@ import CLIProxyBarCore
 enum ActiveQuotaParser {
     static func supports(_ provider: String) -> Bool { ["claude", "codex", "opencode-go", "antigravity"].contains(provider) }
     static func supports(_ account: ProxyAccount, pluginProviders: Set<String>) -> Bool {
-        supports(account.provider) || account.supports_quota == true || pluginProviders.contains(account.provider)
+        supports(account.provider) || account.supports_quota == true || PluginQuotaParser.text(account.quota_provider) != nil
+            || pluginProviders.contains(QuotaProviderRegistry.normalize(account.provider))
     }
 
     static func googleRequest(for account: ProxyAccount, operation: String, payload: String) throws -> ProxyAPICall {

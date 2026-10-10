@@ -79,6 +79,10 @@ CLIProxyBar discovers plugin capabilities through `GET /v0/management/quota/prov
 It reads normalized quotas through `POST /v0/management/quota/fetch`.
 Plugins that implement these endpoints require no separate app adapter.
 
+Provider names and plan labels use backend metadata. Numeric summaries preserve units and use your locale for number and currency formats.
+Successful responses with no quota limits remain neutral. The menu distinguishes unavailable quotas, cached readings, and failed requests.
+Generic plugins receive pace indicators and reset alerts only when their window behavior is known.
+
 New integrations use response fixtures and request tests without provider credentials.
 Claude, Codex and OpenCode Go also have live account checks.
 Antigravity and other plugins still need live validation by someone with an account.
@@ -190,7 +194,7 @@ The panel shows recorded token or request totals for today, yesterday, and the l
 It includes input, output, cache, and reasoning counters, an activity grid, and totals by model.
 The panel aligns with the hovered account and stays within the screen.
 Each activity square represents one day. Month and weekday labels orient the 26-week grid.
-Today has a thin ring inside its square. Upcoming days have dashed outlines, and days before collection have a faint fill.
+Today has a thicker outline along its square's border. Upcoming days have dashed outlines, and days before collection have a faint fill.
 The Today legend is hollow. Square colors show the recorded activity level.
 Choose **Tokens** or **Requests** to change period totals, daily activity, and model totals.
 The model list sorts by the selected measure. The token breakdown stays visible in both modes.

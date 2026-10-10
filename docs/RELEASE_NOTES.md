@@ -1,12 +1,16 @@
-CLIProxyBar 0.4.0 adds provider discovery and broader quota support:
+CLIProxyBar 0.4.1 improves generic provider quotas and daily activity:
 
-- Every configured provider can appear in the menu and optional usage history. Settings includes detected providers for menu bar indicators.
-- Plugins with the generic quota capability share one adapter. It preserves quota groups, unfamiliar windows, reset times, plan labels, and numeric summaries.
-- Antigravity has a direct adapter for quota summaries, with older per-model responses as a fallback.
-- Unknown allowances stay unknown. Numeric summaries do not affect percentage gauges.
+- Provider names use backend metadata in menus and Settings. The provider selector scrolls when many providers are available.
+- Plan labels support more subscription fields. Numeric summaries preserve units and use your locale for number and currency formats.
+- Duplicate quota windows have distinct labels. Quota identities stay stable when the backend changes their order.
+- Successful responses with no quota limits remain neutral. Cached readings, unavailable quotas, and failed requests have separate states.
+- Failed requests preserve earlier readings. Cached accounts retain plan labels and empty responses after relaunch.
+- Generic requests honor the account's quota provider override. Refresh results match the provider and credential identity.
+- Pace indicators and reset alerts require known window behavior. Generic window labels alone do not establish reset behavior.
+- Today has a thicker outline along the activity square's border. The outline preserves the activity color, and its legend stays hollow.
 
-The new integrations use response fixtures and request tests. Antigravity and additional plugins still need live account validation.
-Claude, Codex and OpenCode Go have live account checks. The notification crash fix from 0.3.3 remains included.
+Response fixtures cover the generic quota contract. Claude, Codex and OpenCode Go passed live checks against a local CLIProxyAPI instance.
+Antigravity and additional plugins still need live account validation.
 
 Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in updater.
 

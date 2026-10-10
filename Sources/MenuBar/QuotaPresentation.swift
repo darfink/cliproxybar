@@ -114,6 +114,7 @@ public extension QuotaMetric {
     }
 
     var formattedUsage: String? {
+        if let summary { return summary.formatted() }
         if let presentation {
             switch presentation {
             case .progress(let used, let limit, let unit):
@@ -139,6 +140,7 @@ public extension QuotaMetric {
     }
 
     var isStandaloneMetric: Bool {
+        if summary != nil { return true }
         guard let presentation else { return false }
         return switch presentation {
         case .amount, .status: true
@@ -234,6 +236,14 @@ public extension QuotaMetric {
 
     var formattedResetTime: String {
         GroupedModelQuota.relativeResetTime(resetTime)
+    }
+}
+
+public extension QuotaSummaryValue {
+    func formatted(locale: Locale = .current) -> String {
+        let formatted = currency.map { value.formatted(.currency(code: $0).locale(locale)) }
+            ?? value.formatted(.number.precision(.fractionLength(0...2)).locale(locale))
+        return [formatted, unit].compactMap { $0 }.joined(separator: " ")
     }
 }
 

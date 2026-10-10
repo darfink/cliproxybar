@@ -27,7 +27,30 @@ struct ProxyAccount: Decodable, Sendable {
     var success: Int64? = nil
     var failed: Int64? = nil
     var supports_quota: Bool? = nil
+    var quota_provider: String? = nil
     var project_id: String? = nil
+    var providerDisplayName: String? = nil
+    var quotaState: QuotaReadState? = nil
+
+    var identity: ProxyAccountIdentity { ProxyAccountIdentity(provider: provider, name: name, authIndex: auth_index) }
+    var quotaReadState: QuotaReadState {
+        if let quotaState { return quotaState }
+        let reading = providerQuota()
+        if quotaIssue != nil { return reading.hasDisplayData ? .stale : .failed }
+        if fetchedQuota != nil { return reading.models.isEmpty ? .empty : .current }
+        return reading.models.isEmpty ? .pending : .current
+    }
+
+    mutating func recordQuota(_ quota: ProviderQuota) {
+        fetchedQuota = quota
+        quotaIssue = nil
+        quotaState = quota.models.isEmpty ? .empty : .current
+    }
+
+    mutating func recordQuotaFailure(_ issue: String, unsupported: Bool = false) {
+        quotaIssue = issue
+        quotaState = unsupported ? .unsupported : (providerQuota().hasDisplayData ? .stale : .failed)
+    }
 
     static func observationDate(_ raw: String?) -> Date {
         guard let raw else { return .distantPast }
@@ -69,12 +92,13 @@ struct ProxyAccount: Decodable, Sendable {
 }
 
 enum LocalClientError: LocalizedError {
-    case missingKey, keychain(OSStatus), http(Int), invalidEndpoint, missingAuthIndex, providerHTTP(Int), noQuotaData
+    case missingKey, keychain(OSStatus), http(Int), invalidEndpoint, missingAuthIndex, providerHTTP(Int), noQuotaData, quotaUnsupported
     var errorDescription: String? {
         switch self {
         case .missingAuthIndex: "Account has no proxy authentication index."
         case .providerHTTP(let status): "Quota request returned HTTP \(status). Previous readings are retained."
         case .noQuotaData: "The provider returned no supported quota readings."
+        case .quotaUnsupported: "CLIProxyAPI has no quota capability for this account."
         case .missingKey: "Add your CLIProxyAPI management key in Settings (⌘,)."
         case .keychain(let status): "Keychain access failed (\(status))."
         case .http(let status): status == 401 || status == 403 ? "Management key was rejected. Update it in Settings (⌘,)." : "CLIProxyAPI returned HTTP \(status)."
@@ -144,15 +168,20 @@ struct LocalProxyClient: Sendable {
         return try JSONDecoder().decode([ProxyUsageEvent].self, from: data)
     }
 
-    func fetchQuotaProviders() async throws -> Set<String> {
-        do { return try PluginQuotaParser.providers(await send(path: "quota/providers")) }
-        catch LocalClientError.http(let status) where status == 404 || status == 501 { return [] }
+    func fetchQuotaProviders() async throws -> QuotaProviderRegistry {
+        do { return try PluginQuotaParser.registry(await send(path: "quota/providers")) }
+        catch LocalClientError.http(let status) where status == 404 || status == 501 { return QuotaProviderRegistry() }
     }
 
     func fetchQuota(for account: ProxyAccount, pluginProviders: Set<String> = []) async throws -> ProviderQuota {
-        if account.provider == "opencode-go" || account.supports_quota == true || pluginProviders.contains(account.provider) {
+        if account.provider == "opencode-go" || account.supports_quota == true || PluginQuotaParser.text(account.quota_provider) != nil
+            || pluginProviders.contains(QuotaProviderRegistry.normalize(account.provider)) {
             guard let index = account.auth_index, !index.isEmpty else { throw LocalClientError.missingAuthIndex }
-            let data = try await send(path: "quota/fetch", body: JSONEncoder().encode(["auth_index": index]))
+            var request = ["auth_index": index]
+            if let provider = PluginQuotaParser.text(account.quota_provider) { request["provider"] = provider }
+            let data: Data
+            do { data = try await send(path: "quota/fetch", body: JSONEncoder().encode(request)) }
+            catch LocalClientError.http(501) { throw LocalClientError.quotaUnsupported }
             var quota = try PluginQuotaParser.parse(data, provider: account.provider)
             quota.accountDisplayName = account.displayName
             return quota

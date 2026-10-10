@@ -8,6 +8,9 @@ struct QuotaCache {
         let provider: String
         let email: String?
         let quota: ProviderQuota
+        var providerDisplayName: String? = nil
+        var disabled: Bool? = nil
+        var quotaState: QuotaReadState? = nil
     }
     struct Envelope: Codable {
         let endpoint: String
@@ -29,17 +32,20 @@ struct QuotaCache {
         let saved = try JSONDecoder().decode(Envelope.self, from: Data(contentsOf: source))
         guard saved.endpoint == endpoint else { return [] }
         return saved.entries.map { entry in
-            var account = ProxyAccount(name: entry.name, provider: entry.provider, email: entry.email, disabled: nil, unavailable: nil, quota: nil, model_quotas: nil)
+            var account = ProxyAccount(name: entry.name, provider: entry.provider, email: entry.email, disabled: entry.disabled, unavailable: nil, quota: nil, model_quotas: nil)
             account.fetchedQuota = entry.quota
-            account.quotaIssue = "Cached reading · refreshing…"
+            account.providerDisplayName = entry.providerDisplayName
+            account.quotaState = entry.quotaState == .unsupported ? .unsupported : .cached
+            account.quotaIssue = "Saved reading · refreshing…"
             return account
         }
     }
     func save(_ accounts: [ProxyAccount]) throws {
         let entries = accounts.compactMap { account -> Entry? in
-            let quota = account.providerQuota()
-            guard !quota.models.isEmpty else { return nil }
-            return Entry(name: account.name, provider: account.provider, email: account.email, quota: quota)
+            var quota = account.providerQuota()
+            quota.accountDisplayName = account.displayName
+            return Entry(name: account.name, provider: account.provider, email: account.email, quota: quota,
+                providerDisplayName: account.providerDisplayName, disabled: account.disabled, quotaState: account.quotaReadState)
         }
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -54,10 +60,13 @@ struct QuotaCache {
             if let prior = previous.first(where: { $0.name == new.name && $0.provider == new.provider }) {
                 let priorQuota = prior.providerQuota()
                 let freshQuota = new.providerQuota()
-                if !priorQuota.models.isEmpty && (freshQuota.models.isEmpty || priorQuota.lastUpdated > freshQuota.lastUpdated) {
+                if new.fetchedQuota == nil, prior.fetchedQuota != nil || priorQuota.hasDisplayData,
+                   !freshQuota.hasDisplayData || priorQuota.lastUpdated > freshQuota.lastUpdated {
                     account.fetchedQuota = priorQuota
                 }
                 account.quotaIssue = prior.quotaIssue
+                account.quotaState = prior.quotaState
+                account.providerDisplayName = prior.providerDisplayName
             }
             return account
         }

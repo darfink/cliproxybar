@@ -11,6 +11,7 @@ struct StatusBarMenuAccountSnapshot: Equatable, Sendable {
     let isRefreshBlocked: Bool
     var refreshIssue: String? = nil
     var proxyUsage: ProxyUsageSnapshot? = nil
+    var quotaReadState: QuotaReadState = .current
 }
 
 struct StatusBarMenuProviderSnapshot: Equatable, Sendable {
@@ -18,6 +19,8 @@ struct StatusBarMenuProviderSnapshot: Equatable, Sendable {
     let accounts: [StatusBarMenuAccountSnapshot]
     let isRefreshing: Bool
     let supportsScopedRefresh: Bool
+    var displayName: String? = nil
+    var title: String { displayName ?? provider.displayName }
 
     @MainActor
     static func grouping(_ accounts: [ProxyAccount], refreshing: Bool,
@@ -29,8 +32,9 @@ struct StatusBarMenuProviderSnapshot: Equatable, Sendable {
                 StatusBarMenuAccountSnapshot(id: QuotaAccountID(provider: provider, accountKey: account.name),
                     email: account.displayName, quota: account.providerQuota(), subscription: nil,
                     isActiveInIDE: false, isRefreshing: refreshing, isRefreshBlocked: refreshing,
-                    refreshIssue: account.quotaIssue, proxyUsage: usage(account))
-            }, isRefreshing: refreshing, supportsScopedRefresh: true)
+                    refreshIssue: account.quotaIssue, proxyUsage: usage(account), quotaReadState: account.quotaReadState)
+            }, isRefreshing: refreshing, supportsScopedRefresh: true,
+                displayName: groups[provider]?.compactMap(\.providerDisplayName).first)
         }
     }
 }
@@ -67,4 +71,5 @@ public struct StatusBarMenuSnapshot: Equatable, Sendable {
     let appearanceMode: AppearanceMode
     let language: AppLanguage
     var proxyAddress: String? = nil
+    var quotaDiscoveryIssue: String? = nil
 }

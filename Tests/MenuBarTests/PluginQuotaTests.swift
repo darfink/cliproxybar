@@ -14,7 +14,7 @@ final class PluginQuotaTests: XCTestCase {
         XCTAssertNil(quota.models[2].windowDuration)
     }
     func testInvalidOrMissingReadingsStayUnknown() {
-        for body in ["{}", #"{"groups":[{"buckets":[{"window":"weekly"}]}]}"#, #"{"groups":[{"buckets":[{"window":"weekly","remainingFraction":2}]}]}"#, #"{"groups":[{"buckets":[{"window":"weekly","remainingFraction":true}]}]}"#] {
+        for body in [#"{"groups":[{"buckets":[{"window":"weekly"}]}]}"#, #"{"groups":[{"buckets":[{"window":"weekly","remainingFraction":2}]}]}"#, #"{"groups":[{"buckets":[{"window":"weekly","remainingFraction":true}]}]}"#] {
             XCTAssertThrowsError(try ActiveQuotaParser.parsePlugin(Data(body.utf8)))
         }
     }

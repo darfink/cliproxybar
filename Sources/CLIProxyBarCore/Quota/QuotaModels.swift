@@ -143,6 +143,21 @@ public enum QuotaMetricPresentation: Codable, Equatable, Sendable {
     case status(text: String)
 }
 
+/// A provider-defined summary value, formatted only when it is displayed.
+public struct QuotaSummaryValue: Codable, Equatable, Sendable {
+    public let key: String
+    public let value: Double
+    public let unit: String?
+    public let currency: String?
+
+    public init(key: String, value: Double, unit: String? = nil, currency: String? = nil) {
+        self.key = key
+        self.value = value
+        self.unit = unit
+        self.currency = currency
+    }
+}
+
 public struct QuotaMetric: Codable, Equatable, Identifiable, Sendable {
     public let name: String
     public let percentage: Double
@@ -154,6 +169,7 @@ public struct QuotaMetric: Codable, Equatable, Identifiable, Sendable {
     public var tooltip: String?
     public var windowDuration: TimeInterval?
     public var label: String?
+    public var summary: QuotaSummaryValue?
 
     public var id: String { name }
     public var usedPercentage: Double { 100 - percentage }
@@ -168,7 +184,8 @@ public struct QuotaMetric: Codable, Equatable, Identifiable, Sendable {
         remaining: Int? = nil,
         tooltip: String? = nil,
         windowDuration: TimeInterval? = nil,
-        label: String? = nil
+        label: String? = nil,
+        summary: QuotaSummaryValue? = nil
     ) {
         self.name = name
         self.percentage = percentage
@@ -180,6 +197,7 @@ public struct QuotaMetric: Codable, Equatable, Identifiable, Sendable {
         self.tooltip = tooltip
         self.windowDuration = windowDuration
         self.label = label
+        self.summary = summary
     }
 }
 
@@ -255,6 +273,10 @@ public struct ProviderQuota: Codable, Equatable, Sendable {
     public var analytics: QuotaAnalytics?
     public var accountDisplayName: String?
     public var availableResetCredits: Int?
+
+    public var hasDisplayData: Bool {
+        !models.isEmpty || planType?.isEmpty == false || availableResetCredits != nil
+    }
 
     public init(
         models: [QuotaMetric] = [],

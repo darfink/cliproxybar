@@ -14,13 +14,8 @@ enum QuotaResetKind: String, Codable, Sendable {
                 if name.hasSuffix("-session") { return .short }
                 if name.hasSuffix("-weekly") { return .long }
             }
-            if name.hasPrefix("plugin:"), let window = name.split(separator: ":").last {
-                switch window {
-                case "rolling", "five-hour", "five-hour-session", "5h": return .short
-                case "weekly", "monthly": return .long
-                default: break
-                }
-            }
+            // Generic labels do not establish whether a reset restores the whole
+            // allowance or only expires part of a rolling window.
             return nil
         }
     }

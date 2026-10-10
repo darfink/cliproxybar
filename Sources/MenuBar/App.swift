@@ -18,11 +18,11 @@ struct MenuBarApp {
                     let accounts = try await client.fetch()
                     let plugins = try await client.fetchQuotaProviders()
                     for account in accounts where account.disabled != true {
-                        guard ActiveQuotaParser.supports(account, pluginProviders: plugins) else {
+                        guard ActiveQuotaParser.supports(account, pluginProviders: plugins.identifiers) else {
                             print("\(account.provider): no quota API; usage history remains available")
                             continue
                         }
-                        let quota = try await client.fetchQuota(for: account, pluginProviders: plugins)
+                        let quota = try await client.fetchQuota(for: account, pluginProviders: plugins.identifiers)
                         print("\(account.provider): \(quota.models.filter { $0.percentage >= 0 }.map { "\($0.name)=\(Int($0.percentage))% remaining" }.joined(separator: ", "))")
                     }
                     print("Connected: \(accounts.count) accounts")
@@ -58,7 +58,8 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     var refreshing = false
     var message = "Connecting to CLIProxyAPI…"
     var selected: QuotaProvider?
-    var pluginProviders: Set<String> = []
+    var quotaRegistry = QuotaProviderRegistry()
+    var quotaDiscoveryIssue: String?
     var pollTask: Task<Void, Never>?
     var resetRefreshTask: Task<Void, Never>?
     var resetMonitor: QuotaResetMonitor
@@ -112,7 +113,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         commands = StatusBarCommandDispatcher(handlers: StatusBarCommandHandlers(
             refreshAll: { [weak self] in await self?.refresh() },
             refreshProvider: { [weak self] provider in await self?.refresh(provider: provider.rawValue) },
-            refreshAccount: { [weak self] account in await self?.refresh(accountName: account.accountKey) },
+            refreshAccount: { [weak self] account in await self?.refresh(provider: account.provider.rawValue, accountName: account.accountKey) },
             toggleProxy: {}, toggleTunnel: { _ in },
             copyText: { NSPasteboard.general.clearContents(); NSPasteboard.general.setString($0, forType: .string) },
             switchAntigravityAccount: { _ in }, isAntigravityIDERunning: { false }, confirmAntigravitySwitch: { _, _ in false },
@@ -146,7 +147,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--smoke-cache-test") {
             let menu = StatusBarMenuRenderer(snapshot: snapshot(), commands: commands).buildMenu()
             print("Offline startup: cachedAccounts=\(cachedOnLaunch), menuItems=\(menu.items.count)")
-            exit(cachedOnLaunch > 0 && accounts.allSatisfy { !$0.providerQuota().models.isEmpty } ? 0 : 1)
+            exit(cachedOnLaunch > 0 && accounts.allSatisfy { $0.fetchedQuota != nil } ? 0 : 1)
         }
         if !CommandLine.arguments.contains("--smoke-test") { applyUsageTracking() }
         pollTask = Task { [weak self] in
@@ -181,7 +182,8 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         resetMonitor = QuotaResetMonitor(endpoint: newClient.baseURL.absoluteString)
         try? resetMonitor.load()
         accounts = (try? cache.load()) ?? []
-        pluginProviders = []
+        quotaRegistry = QuotaProviderRegistry()
+        quotaDiscoveryIssue = nil
         preferences.updateAvailableProviders(accounts)
         selected = nil
         connected = false
@@ -207,42 +209,68 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
             do {
                 let discovered = try await client.fetchQuotaProviders()
                 guard generation == endpointGeneration else { return }
-                pluginProviders = discovered
-            } catch { /* Keep the previous discovery while direct adapters continue. */ }
+                quotaRegistry = discovered
+                quotaDiscoveryIssue = nil
+            } catch {
+                quotaDiscoveryIssue = "Quota discovery failed. " + (error is LocalClientError ? error.localizedDescription : "The previous provider registry is retained.")
+            }
             guard generation == endpointGeneration else { return }
-            let pluginProviders = self.pluginProviders
+            let pluginProviders = quotaRegistry.identifiers
+            for index in accounts.indices {
+                let account = accounts[index]
+                if let metadata = quotaRegistry.entry(for: PluginQuotaParser.text(account.quota_provider) ?? account.provider) {
+                    accounts[index].providerDisplayName = metadata.displayName
+                } else if quotaDiscoveryIssue == nil {
+                    accounts[index].providerDisplayName = nil
+                }
+                if !ActiveQuotaParser.supports(account, pluginProviders: pluginProviders) {
+                    if quotaDiscoveryIssue == nil {
+                        accounts[index].quotaState = .unsupported
+                        accounts[index].quotaIssue = nil
+                    } else {
+                        accounts[index].recordQuotaFailure("Quota capability could not be checked. Previous readings are retained.")
+                    }
+                }
+            }
+            preferences.updateAvailableProviders(accounts)
             var resetEvents: [QuotaResetEvent] = []
+            var fetchedCount = 0
             let targets = accounts.filter {
                 ActiveQuotaParser.supports($0, pluginProviders: pluginProviders) && $0.disabled != true &&
                 (provider == nil || QuotaProvider(rawValue: $0.provider) == QuotaProvider(rawValue: provider!)) && (accountName == nil || $0.name == accountName)
             }
-            await withTaskGroup(of: (String, ProviderQuota?, String?).self) { group in
+            await withTaskGroup(of: (ProxyAccountIdentity, ProviderQuota?, String?, Bool).self) { group in
                 for account in targets {
                     group.addTask { [client] in
-                        do { return (account.name, try await client.fetchQuota(for: account, pluginProviders: pluginProviders), nil) }
+                        do { return (account.identity, try await client.fetchQuota(for: account, pluginProviders: pluginProviders), nil, false) }
+                        catch LocalClientError.quotaUnsupported {
+                            return (account.identity, nil, LocalClientError.quotaUnsupported.localizedDescription, true)
+                        }
                         catch {
                             let issue = error is LocalClientError ? error.localizedDescription : "Quota request failed. Previous readings are retained."
-                            return (account.name, nil, issue)
+                            return (account.identity, nil, issue, false)
                         }
                     }
                 }
-                for await (name, quota, issue) in group {
+                for await (identity, quota, issue, unsupported) in group {
                     guard generation == endpointGeneration else { group.cancelAll(); return }
-                    guard let index = accounts.firstIndex(where: { $0.name == name }) else { continue }
+                    guard let index = accounts.firstIndex(where: { $0.identity == identity }) else { continue }
                     if let quota {
-                        accounts[index].fetchedQuota = quota
+                        accounts[index].recordQuota(quota)
+                        fetchedCount += 1
                         if !CommandLine.arguments.contains("--smoke-test") {
                             resetEvents += resetMonitor.observe(account: accounts[index], quota: quota)
                         }
-                    }
-                    accounts[index].quotaIssue = issue
+                    } else if let issue { accounts[index].recordQuotaFailure(issue, unsupported: unsupported) }
                     render()
                 }
             }
             guard generation == endpointGeneration else { return }
-            let failures = accounts.filter { $0.quotaIssue != nil }.count
+            let failures = accounts.filter { $0.quotaReadState.isFailure }.count
             message = "Connected • refreshed " + Date().formatted(date: .omitted, time: .shortened)
-            message += failures == 0 ? "\nQuotas fetched directly from providers." : "\nSome quota requests failed. Previous readings are retained."
+            message += fetchedCount == 0 ? "\nNo quota readings fetched." : "\nQuota responses received for \(fetchedCount) account\(fetchedCount == 1 ? "" : "s")."
+            if failures > 0 { message += "\nSome quota requests failed. Previous readings are retained." }
+            if let quotaDiscoveryIssue { message += "\n" + quotaDiscoveryIssue }
             do { try cache.save(accounts) }
             catch { message += "\nCould not save readings for the next launch." }
             if !CommandLine.arguments.contains("--smoke-test") {
@@ -256,7 +284,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
             connected = false
             message = error is LocalClientError ? error.localizedDescription : "Cannot reach CLIProxyAPI. Check the proxy URL and that management access is enabled."
             if !accounts.isEmpty { message += "\nShowing previous readings." }
-            for index in accounts.indices { accounts[index].quotaIssue = "Proxy unavailable · previous reading" }
+            for index in accounts.indices { accounts[index].recordQuotaFailure("Proxy unavailable · previous reading") }
         }
         guard generation == endpointGeneration else { return }
         refreshing = false
@@ -270,11 +298,12 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
             print("Startup: connected=\(connected), accounts=\(accounts.count), compact=\(compact.items.count) items/\(compactHeight)pt, expanded=\(expanded.items.count) items/\(expandedHeight)pt")
             for account in accounts {
                 if let resets = account.providerQuota().availableResetCredits { print("Codex resets available: \(resets)") }
-                print("\(account.provider): metrics=\(account.providerQuota().models.count), refresh=\(account.quotaIssue == nil ? "ok" : "failed")")
+                print("\(account.provider): metrics=\(account.providerQuota().models.count), state=\(account.quotaReadState.rawValue)")
             }
             print("Cached accounts on launch: \(cachedOnLaunch)")
-            let refreshed = accounts.filter { ActiveQuotaParser.supports($0, pluginProviders: pluginProviders) && $0.disabled != true }
-            exit(connected && !compact.items.isEmpty && compactHeight < expandedHeight && refreshed.allSatisfy { $0.quotaIssue == nil && !$0.providerQuota().models.isEmpty } ? 0 : 1)
+            let refreshed = accounts.filter { ActiveQuotaParser.supports($0, pluginProviders: quotaRegistry.identifiers) && $0.disabled != true }
+            exit(connected && quotaDiscoveryIssue == nil && !compact.items.isEmpty && compactHeight < expandedHeight
+                && refreshed.allSatisfy { !$0.quotaReadState.isFailure && $0.fetchedQuota != nil } ? 0 : 1)
         }
     }
     private func scheduleResetRefresh() {
@@ -293,7 +322,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     }
     func snapshot() -> StatusBarMenuSnapshot {
         let providers = StatusBarMenuProviderSnapshot.grouping(accounts, refreshing: refreshing) { usageCollector.snapshot(for: $0) }
-        return StatusBarMenuSnapshot(connectionMessage: message, isLocalProxyMode: client.isLoopback, proxyPort: UInt16(client.baseURL.port ?? client.defaultPort), isProxyRunning: connected, tunnel: CloudflareTunnelSnapshot(), providers: providers, selectedProvider: selected, isLoadingQuotas: refreshing, displaySettings: StatusBarMenuDisplaySettings(quotaDisplayMode: preferences.mode, quotaDisplayStyle: .lowestBar, hideSensitiveInfo: false, modelAggregationMode: .lowest), appearanceMode: .system, language: .english, proxyAddress: client.displayAddress)
+        return StatusBarMenuSnapshot(connectionMessage: message, isLocalProxyMode: client.isLoopback, proxyPort: UInt16(client.baseURL.port ?? client.defaultPort), isProxyRunning: connected, tunnel: CloudflareTunnelSnapshot(), providers: providers, selectedProvider: selected, isLoadingQuotas: refreshing, displaySettings: StatusBarMenuDisplaySettings(quotaDisplayMode: preferences.mode, quotaDisplayStyle: .lowestBar, hideSensitiveInfo: false, modelAggregationMode: .lowest), appearanceMode: .system, language: .english, proxyAddress: client.displayAddress, quotaDiscoveryIssue: quotaDiscoveryIssue)
     }
     func render() {
         let hasReadings = accounts.contains { $0.providerQuota().models.contains { $0.percentage >= 0 } }

@@ -113,19 +113,20 @@ final class StatusBarMenuRenderer {
     func buildMenu() -> NSMenu {
         if !expanded { return buildCompactMenu() }
         let menu = makeMenu()
+        addDiscoveryNotice(to: menu)
 
         // Provider picker and account groups
         let providers = snapshot.providers
         if !providers.isEmpty {
             let pickerView = MenuProviderPickerView(
-                providers: providers.map(\.provider),
+                providers: providers,
                 controller: providerFilterController
             )
             menu.addItem(viewItem(for: pickerView))
             menu.addItem(NSMenuItem.separator())
 
             for (index, providerSnapshot) in providers.enumerated() {
-                let headerView = MenuProviderSectionHeader(provider: providerSnapshot.provider)
+                let headerView = MenuProviderSectionHeader(provider: providerSnapshot.provider, title: providerSnapshot.title)
                 let headerItem = viewItem(for: headerView)
                 providerFilterController.register(headerItem, scope: .allProvidersOnly)
                 menu.addItem(headerItem)
@@ -185,10 +186,12 @@ final class StatusBarMenuRenderer {
                 .help(snapshot.connectionMessage)
             menu.addItem(viewItem(for: notice))
         }
+        addDiscoveryNotice(to: menu)
         for provider in snapshot.providers {
             for account in provider.accounts {
                 let item = viewItem(for: CompactQuotaAccountView(
                     provider: provider.provider,
+                    providerName: provider.title,
                     account: account,
                     showAccountName: provider.accounts.count > 1,
                     displayMode: snapshot.displaySettings.quotaDisplayMode
@@ -231,6 +234,14 @@ final class StatusBarMenuRenderer {
         return menu
     }
 
+    private func addDiscoveryNotice(to menu: NSMenu) {
+        guard let issue = snapshot.quotaDiscoveryIssue else { return }
+        menu.addItem(viewItem(for: Label("Quota discovery unavailable", systemImage: "exclamationmark.circle")
+            .font(.caption).foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12).padding(.vertical, 6).help(issue)))
+    }
+
     func transferFilterScope(from source: NSMenuItem, to destination: NSMenuItem) {
         providerFilterController.transferScope(from: source, to: destination)
         // A refresh moves the submenu to an existing item. Its placement must
@@ -255,7 +266,9 @@ final class StatusBarMenuRenderer {
             isActiveInIDE: account.isActiveInIDE,
             settings: snapshot.displaySettings,
             onUseAccount: nil,
-            refreshIssue: account.refreshIssue
+            refreshIssue: account.refreshIssue,
+            quotaReadState: account.quotaReadState,
+            isRefreshing: account.isRefreshing
         )
 
         let item = viewItem(for: cardView)
@@ -385,6 +398,7 @@ private struct CompactMenuButtonStyle: ButtonStyle {
 
 private struct CompactQuotaAccountView: View {
     let provider: QuotaProvider
+    let providerName: String
     let account: StatusBarMenuAccountSnapshot
     let showAccountName: Bool
     let displayMode: QuotaDisplayMode
@@ -394,12 +408,12 @@ private struct CompactQuotaAccountView: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
                 ProviderIconMono(provider: provider, size: 13, tint: provider.color)
-                Text(provider.displayName).font(.system(size: 12, weight: .semibold))
+                Text(providerName).font(.system(size: 12, weight: .semibold)).lineLimit(1)
                     .foregroundStyle(provider.color)
                 Spacer()
-                if let issue = account.refreshIssue {
-                    Image(systemName: "clock.badge.exclamationmark").foregroundStyle(.orange)
-                        .help(issue)
+                if let symbol = account.quotaReadState.symbol {
+                    Image(systemName: symbol).foregroundStyle(account.quotaReadState.isFailure ? .orange : .secondary)
+                        .help(account.refreshIssue ?? "Saved quota reading")
                 }
                 if account.quota.isForbidden {
                     Image(systemName: "pause.circle").foregroundStyle(.secondary)
@@ -412,7 +426,13 @@ private struct CompactQuotaAccountView: View {
                 Text(account.email).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
             }
             if account.quota.models.isEmpty {
-                Text("No quota data").font(.caption).foregroundStyle(.secondary)
+                if let plan = account.quota.planType {
+                    Text(plan).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Text(account.quotaReadState.emptyMessage(refreshing: account.isRefreshing))
+                    .font(.caption).foregroundStyle(.secondary).help(account.refreshIssue ?? "")
+            } else if account.quotaReadState == .unsupported {
+                Text("Quota API unavailable · previous reading").font(.caption).foregroundStyle(.secondary)
             }
             ForEach(account.quota.models) { metric in
                 quotaRow(metric).help(paceTooltip(metric))
@@ -450,7 +470,7 @@ private struct CompactQuotaAccountView: View {
     }
 
     private func pace(for metric: QuotaMetric) -> QuotaPace? {
-        account.refreshIssue == nil ? QuotaPace.calculate(metric: metric, observedAt: account.quota.lastUpdated) : nil
+        account.quotaReadState.allowsPace ? QuotaPace.calculate(metric: metric, observedAt: account.quota.lastUpdated) : nil
     }
 
     private func paceTooltip(_ metric: QuotaMetric) -> String {
@@ -458,7 +478,7 @@ private struct CompactQuotaAccountView: View {
         if metric.percentage == 0 { return metric.displayName + reset + " · Limit reached" }
         guard let pace = pace(for: metric) else {
             let unavailable = metric.windowDuration != nil && metric.percentage < 100 ? " · Pace unavailable" : ""
-            return metric.displayName + reset + unavailable
+            return metric.displayName + reset + unavailable + (metric.tooltip.map { " · " + $0 } ?? "")
         }
         let difference = Int(abs(pace.reservePoints).rounded())
         let balance = difference == 0 ? "On pace" : "\(difference)% " + (pace.reservePoints >= 0 ? "in reserve" : "in deficit")
@@ -467,10 +487,12 @@ private struct CompactQuotaAccountView: View {
 
     private func shortLabel(_ metric: QuotaMetric) -> String {
         switch metric.name {
-        case "five-hour-session": "5 hours"
-        case "codex-session": "Session"
-        case "seven-day-weekly", "codex-weekly": "Weekly"
-        default: metric.displayName
+        case "five-hour-session": return "5 hours"
+        case "codex-session": return "Session"
+        case "seven-day-weekly", "codex-weekly": return "Weekly"
+        default:
+            if let description = metric.tooltip, metric.displayName.hasSuffix(description) { return description }
+            return metric.displayName
         }
     }
 }
@@ -479,11 +501,12 @@ private struct CompactQuotaAccountView: View {
 
 private struct MenuProviderSectionHeader: View {
     let provider: QuotaProvider
+    let title: String
 
     var body: some View {
         HStack(spacing: 6) {
             ProviderIconMono(provider: provider, size: 14, tint: provider.color)
-            Text(provider.displayName)
+            Text(title).lineLimit(1)
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .foregroundStyle(provider.color)
             Spacer()
@@ -496,26 +519,30 @@ private struct MenuProviderSectionHeader: View {
 // MARK: - Provider Picker View (separate from accounts list)
 
 private struct MenuProviderPickerView: View {
-    let providers: [QuotaProvider]
+    let providers: [StatusBarMenuProviderSnapshot]
     let controller: StatusBarProviderFilterController
     
     var body: some View {
-        HStack(spacing: 4) {
-            AllProviderFilterButton(isSelected: controller.selectedProvider == nil) {
-                controller.select(nil)
-            }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                AllProviderFilterButton(isSelected: controller.selectedProvider == nil) {
+                    controller.select(nil)
+                }
 
-            ForEach(providers) { provider in
-                ProviderFilterButton(
-                    provider: provider,
-                    isSelected: controller.selectedProvider == provider
-                ) {
-                    controller.select(provider)
+                ForEach(providers, id: \.provider) { entry in
+                    ProviderFilterButton(
+                        provider: entry.provider,
+                        title: entry.displayName ?? entry.provider.shortName,
+                        isSelected: controller.selectedProvider == entry.provider
+                    ) {
+                        controller.select(entry.provider)
+                    }
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .frame(height: 36)
     }
 }
 
@@ -558,6 +585,7 @@ private struct AllProviderFilterButton: View {
 
 private struct ProviderFilterButton: View {
     let provider: QuotaProvider
+    let title: String
     let isSelected: Bool
     let action: () -> Void
     
@@ -567,7 +595,7 @@ private struct ProviderFilterButton: View {
                 ProviderIconMono(provider: provider, size: 12)
                     .opacity(isSelected ? 1.0 : 0.7)
                 
-                Text(provider.shortName)
+                Text(title).frame(maxWidth: 100)
                     .font(.system(size: 11, weight: isSelected ? .semibold : .medium, design: .rounded))
             }
             .lineLimit(1)
@@ -585,6 +613,7 @@ private struct ProviderFilterButton: View {
             )
         }
         .buttonStyle(.plain)
+        .help(title)
     }
 }
 
@@ -773,6 +802,8 @@ private struct MenuAccountCardView: View {
     let settings: StatusBarMenuDisplaySettings
     let onUseAccount: (() -> Void)?
     var refreshIssue: String? = nil
+    var quotaReadState: QuotaReadState = .current
+    var isRefreshing: Bool = false
 
     @State private var isHovered = false
     @State private var isUseHovered = false
@@ -998,7 +1029,7 @@ private struct MenuAccountCardView: View {
         
         return VStack(spacing: 8) {
             if data.models.isEmpty {
-                Text("dashboard.noQuotaData".localized())
+                Text(quotaReadState.emptyMessage(refreshing: isRefreshing))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -1006,7 +1037,7 @@ private struct MenuAccountCardView: View {
             } else if usesPaceRows {
                 ForEach(data.models.filter { !$0.isStandaloneMetric }) { metric in
                     PaceQuotaRow(metric: metric, provider: provider, displayMode: settings.quotaDisplayMode,
-                                 observedAt: data.lastUpdated, hasRefreshIssue: refreshIssue != nil)
+                                 observedAt: data.lastUpdated, hasRefreshIssue: !quotaReadState.allowsPace)
                 }
             } else if !factorySections.isEmpty {
                 ForEach(factorySections) { section in
@@ -1060,10 +1091,12 @@ private struct MenuAccountCardView: View {
                     .lineLimit(1).fixedSize(horizontal: true, vertical: false)
                     .help("Available Codex rate-limit reset credits, reported by the provider.")
             }
-            if let refreshIssue {
-                Image(systemName: "clock.badge.exclamationmark")
-                    .font(.system(size: 10)).foregroundStyle(.orange)
-                    .help(refreshIssue).accessibilityLabel("Previous reading: " + refreshIssue)
+            if let symbol = quotaReadState.symbol {
+                Image(systemName: symbol)
+                    .font(.system(size: 10)).foregroundStyle(quotaReadState.isFailure ? .orange : .secondary)
+                    .help(refreshIssue ?? "Saved quota reading")
+            } else if quotaReadState == .unsupported, !data.models.isEmpty {
+                Text("Quota API unavailable").font(.system(size: 10)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
             Text(data.lastUpdated == .distantPast ? "No observation yet" : "Observed " + data.lastUpdated.formatted(.relative(presentation: .named)))
