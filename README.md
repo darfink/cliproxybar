@@ -172,6 +172,7 @@ macOS asks for notification permission when you enable an alert. Confetti works 
 It passes clicks through, keeps keyboard focus unchanged, and respects macOS Reduce Motion.
 Fresh provider readings confirm scheduled resets. Rolling alerts wait for the allowance to become fully available again.
 First readings establish a baseline. Failed requests and expired countdowns alone do not trigger alerts.
+Windows that already show 0% usage do not trigger notifications or confetti at reset.
 Reset history prevents duplicate alerts after relaunch. Limits that reset together produce one notification per account and one confetti animation.
 The app must be running and connected. It refreshes at known reset times and checks again during regular polling.
 After sleep, recent resets can be confirmed: up to 15 minutes for sessions and 24 hours for weekly or monthly windows.

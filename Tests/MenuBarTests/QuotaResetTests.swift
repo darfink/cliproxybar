@@ -48,6 +48,78 @@ final class QuotaResetTests: XCTestCase {
         }
     }
 
+    func testTimedResetsDoNotNotifyForZeroDisplayedUsage() {
+        for (provider, name) in [("claude", "five-hour-session"), ("claude", "seven-day-weekly"),
+                                 ("codex", "codex-session"), ("codex", "codex-weekly"),
+                                 ("opencode-go", "opencode-go-weekly"), ("opencode-go", "opencode-go-monthly")] {
+            for (remaining, expected) in [(100.0, 0), (99.8, 0), (99.5, 1), (0.0, 1)] {
+                var monitor = QuotaResetMonitor(endpoint: endpoint)
+                let deadline = start.addingTimeInterval(60)
+                _ = read(&monitor, quota(name, remaining: remaining, at: start, reset: deadline), provider: provider)
+                // Consumption after the deadline belongs to the new window.
+                let events = read(&monitor, quota(name, remaining: 80, at: start.addingTimeInterval(90),
+                    reset: start.addingTimeInterval(604800)), provider: provider)
+                XCTAssertEqual(events.count, expected, "\(provider) \(name), \(remaining)% remaining")
+                XCTAssertEqual(monitor.observations.values.first?.handledReset, deadline)
+            }
+        }
+    }
+
+    func testDelayedConfirmationKeepsTheEndingWindowsUsage() {
+        for (remaining, expected) in [(100.0, 0), (50.0, 1)] {
+            var monitor = QuotaResetMonitor(endpoint: endpoint)
+            let deadline = start.addingTimeInterval(60)
+            _ = read(&monitor, quota(remaining: remaining, at: start, reset: deadline))
+            XCTAssertTrue(read(&monitor, quota(remaining: 100, at: start.addingTimeInterval(90), reset: deadline)).isEmpty)
+            let events = read(&monitor, quota(remaining: 80, at: start.addingTimeInterval(120),
+                reset: start.addingTimeInterval(18000)))
+            XCTAssertEqual(events.count, expected)
+        }
+    }
+
+    func testLatestReadingBeforeDeadlineDeterminesResetAlert() {
+        for (initial, ending, expected) in [(100.0, 50.0, 1), (50.0, 100.0, 0)] {
+            var monitor = QuotaResetMonitor(endpoint: endpoint)
+            let deadline = start.addingTimeInterval(60)
+            _ = read(&monitor, quota(remaining: initial, at: start, reset: deadline))
+            _ = read(&monitor, quota(remaining: ending, at: start.addingTimeInterval(30), reset: deadline))
+            XCTAssertEqual(read(&monitor, quota(remaining: 80, at: start.addingTimeInterval(90),
+                reset: start.addingTimeInterval(18000))).count, expected)
+        }
+    }
+
+    func testUnusedResetStaysSilentAfterRelaunchAndLaterUsedWindowNotifies() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var monitor = QuotaResetMonitor(endpoint: endpoint, directory: directory)
+        let nextWindow = start.addingTimeInterval(18000)
+        _ = read(&monitor, quota(remaining: 100, at: start, reset: start.addingTimeInterval(60)))
+        XCTAssertTrue(read(&monitor, quota(remaining: 80, at: start.addingTimeInterval(90), reset: nextWindow)).isEmpty)
+        try monitor.save()
+        var reopened = QuotaResetMonitor(endpoint: endpoint, directory: directory)
+        try reopened.load()
+        XCTAssertTrue(read(&reopened, quota(remaining: 70, at: start.addingTimeInterval(120), reset: nextWindow)).isEmpty)
+        XCTAssertEqual(read(&reopened, quota(remaining: 100, at: nextWindow.addingTimeInterval(90),
+            reset: nextWindow.addingTimeInterval(18000))).count, 1)
+    }
+
+    func testResetStateFromEarlierVersionsStillLoads() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var monitor = QuotaResetMonitor(endpoint: endpoint, directory: directory)
+        _ = read(&monitor, quota(remaining: 100, at: start, reset: start.addingTimeInterval(60)))
+        try monitor.save()
+        var saved = try JSONSerialization.jsonObject(with: Data(contentsOf: monitor.url)) as! [String: Any]
+        var observations = saved["observations"] as! [String: [String: Any]]
+        for key in observations.keys { observations[key]?.removeValue(forKey: "pendingRemaining") }
+        saved["observations"] = observations
+        try JSONSerialization.data(withJSONObject: saved).write(to: monitor.url)
+        var reopened = QuotaResetMonitor(endpoint: endpoint, directory: directory)
+        try reopened.load()
+        XCTAssertTrue(read(&reopened, quota(remaining: 80, at: start.addingTimeInterval(90),
+            reset: start.addingTimeInterval(18000))).isEmpty)
+    }
+
     func testExpiredCountdownWithoutProviderConfirmationDoesNotNotify() {
         var monitor = QuotaResetMonitor(endpoint: endpoint)
         let deadline = start.addingTimeInterval(60)

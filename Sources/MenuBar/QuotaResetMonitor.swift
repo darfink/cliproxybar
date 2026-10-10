@@ -60,6 +60,7 @@ struct QuotaResetMonitor {
         let plan: String?
         let handledReset: Date?
         let pendingReset: Date?
+        let pendingRemaining: Double?
     }
     struct State: Codable {
         let version: Int
@@ -108,7 +109,9 @@ struct QuotaResetMonitor {
             var handled = previous?.handledReset
             if let previous, previous.plan == plan {
                 var confirmed: Date?
-                if metric.name == "opencode-go-rolling" || (metric.name.hasPrefix("plugin:") && metric.name.hasSuffix(":rolling")) {
+                let isRolling = metric.name == "opencode-go-rolling" || (metric.name.hasPrefix("plugin:") && metric.name.hasSuffix(":rolling"))
+                let endingRemaining = previous.pendingRemaining ?? previous.remaining
+                if isRolling {
                     // A rolling reset date can move as requests expire. Wait for
                     // a full refill rather than treating each increase as a reset.
                     if previous.remaining < 99.5, metric.percentage >= 99.5,
@@ -122,21 +125,34 @@ struct QuotaResetMonitor {
                           previous.handledReset != deadline {
                     let advanced = reset.map { $0 > deadline.addingTimeInterval(60) && $0 > observedAt } ?? false
                     // Some providers clear resets_at when a window is unused.
-                    let cleared = reset == nil && previous.remaining < 99.5 && metric.percentage >= 99.5
+                    let cleared = reset == nil && endingRemaining < 99.5 && metric.percentage >= 99.5
                     if advanced || cleared { confirmed = deadline }
                 }
                 if let confirmed {
                     handled = confirmed
-                    events.append(QuotaResetEvent(accountID: accountID, provider: account.provider,
-                        accountName: account.displayName, metric: metric.name, kind: kind, resetAt: confirmed))
+                    // Match the menu's whole-percent usage display. A reset of
+                    // an already unused window needs neither a banner nor confetti.
+                    if isRolling || (100 - endingRemaining).rounded() > 0 {
+                        events.append(QuotaResetEvent(accountID: accountID, provider: account.provider,
+                            accountName: account.displayName, metric: metric.name, kind: kind, resetAt: confirmed))
+                    }
                 }
             }
             let pending: Date?
             if let reset, reset > observedAt { pending = reset }
             else if previous?.plan == plan, let prior = previous?.pendingReset, handled != prior { pending = prior }
             else { pending = nil }
+            let pendingRemaining: Double?
+            if let pending, let previous, previous.plan == plan, previous.pendingReset == pending, observedAt >= pending {
+                // Confirmation can lag behind the deadline. Do not mistake use
+                // in the new window for use in the window that just ended.
+                pendingRemaining = previous.pendingRemaining ?? previous.remaining
+            } else {
+                pendingRemaining = pending == nil ? nil : metric.percentage
+            }
             observations[key] = Observation(remaining: metric.percentage, resetAt: reset,
-                observedAt: observedAt, plan: plan, handledReset: handled, pendingReset: pending)
+                observedAt: observedAt, plan: plan, handledReset: handled, pendingReset: pending,
+                pendingRemaining: pendingRemaining)
         }
         observations = observations.filter { $0.value.observedAt >= now.addingTimeInterval(-65 * 86400) }
         return events
