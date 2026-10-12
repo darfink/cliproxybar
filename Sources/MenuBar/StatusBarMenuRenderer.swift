@@ -201,8 +201,7 @@ final class StatusBarMenuRenderer {
             }
         }
         if snapshot.providers.isEmpty {
-            menu.addItem(viewItem(for: Text("No quota readings yet").font(.caption)
-                .foregroundStyle(.secondary).padding(12)))
+            menu.addItem(buildEmptyStateItem(compact: true))
         }
         menu.addItem(.separator())
         let footer = HStack(spacing: 4) {
@@ -325,7 +324,17 @@ final class StatusBarMenuRenderer {
     
     // MARK: - Empty State
     
-    private func buildEmptyStateItem() -> NSMenuItem {
+    private func buildEmptyStateItem(compact: Bool = false) -> NSMenuItem {
+        if snapshot.providers.isEmpty, snapshot.hiddenProviderCount > 0 {
+            return viewItem(for: VStack(alignment: .leading, spacing: 4) {
+                Text("All providers are hidden").font(.callout)
+                Text("Choose providers in Settings.").font(.caption).foregroundStyle(.secondary)
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(12))
+        }
+        if compact {
+            return viewItem(for: Text("No quota readings yet").font(.caption)
+                .foregroundStyle(.secondary).padding(12))
+        }
         let emptyView = MenuEmptyStateView()
         return viewItem(for: emptyView)
     }

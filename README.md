@@ -6,7 +6,8 @@
 <p align="center">Your CLIProxyAPI quotas, at a glance. A standalone macOS menu bar app.</p>
 
 CLIProxyBar connects to your local or remote CLIProxyAPI instance and shows quota usage for each account.
-A compact menu keeps the essentials close. Option-click opens an expanded view with reset times and pace indicators.
+A compact menu keeps the essentials close. An expanded view adds reset times and pace indicators.
+Settings selects the default view. Option-click opens the other view.
 
 ## Screenshots
 
@@ -44,7 +45,9 @@ Light and dark images follow your color preference.
 ## Features
 
 - Compact and expanded menus with provider colors and quota gauges.
-- Usage or remaining percentages, with optional provider indicators in the menu bar.
+- Usage or remaining percentages, with one or two quota percentages in the menu bar.
+- Independent provider visibility in the menu bar and drop-down.
+- Compact or expanded default view, with Option-click for the other view.
 - Pace markers and reserve or deficit estimates for supported fixed quota windows.
 - Cached readings at launch, followed by fresh provider requests.
 - Account hover panels with optional token history, model totals, and daily activity.
@@ -67,10 +70,16 @@ The companion [OpenCode Go plugin](https://github.com/massiveits/opencode-go-cli
 A plugin version that exposes only its separate quota page does not work with this integration.
 
 Pace compares used quota with elapsed time in a fixed window. It is an estimate, not a provider guarantee.
-OpenCode Go weekly quotas have pace indicators. Its rolling and monthly responses do not supply enough window metadata for pace calculations.
+OpenCode Go uses a five-hour rolling window and a seven-day weekly window for pace estimates.
+Monthly pace uses its UTC billing anniversary and the actual month length.
+If the reset date permits different cycle starts, the app hides monthly pace.
 Every configured provider can appear in the menu and the optional usage history.
-Settings includes detected providers, so you can choose their menu bar indicators.
+Settings includes detected providers, with separate visibility controls for the menu bar and drop-down.
 Providers without an allowance API show no quota data. Unknown quota does not mean zero usage.
+
+Gemini API keys from Google AI Studio also appear as accounts, alongside Gemini OAuth accounts.
+CLIProxyAPI supplies their request usage but currently exposes no API-key allowance quotas.
+CLIProxyBar does not retain the provider key values.
 
 CLIProxyAPI also routes Gemini, Vertex AI, AI Studio, Kimi, Grok, Devin, Meta and compatible API endpoints.
 Additional providers depend on the installed plugins and CLIProxyAPI version.
@@ -150,8 +159,8 @@ Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in up
 
 | Action | Result |
 | --- | --- |
-| Click the menu bar item | Open the compact menu |
-| Option-click the menu bar item | Open the expanded menu |
+| Click the menu bar item | Open the default view (compact initially) |
+| Option-click the menu bar item | Open the other view |
 | ⌘R or Refresh | Fetch quotas for all supported accounts |
 | ⌘, or Settings | Change the display, visible providers, reset alerts, usage collection, proxy URL, or management key |
 | Hover over an account | Show usage and token history |
@@ -159,6 +168,17 @@ Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in up
 
 Automatic refresh runs every five minutes. A failed request retains the previous reading and shows its status.
 The browser management page handles its own authentication. CLIProxyBar does not put the management key in browser URLs.
+
+**Default menu view** selects Compact or Expanded. Compact remains the initial default.
+**Show both quota windows in the menu bar** keeps paired percentages, such as the Claude session and weekly quotas.
+With this setting off, a single percentage shows the quota window closest to its limit.
+The drop-down retains the full quota breakdown.
+
+The **Providers** table has separate **Menu bar** and **Drop-down** checkboxes.
+Each provider can appear in either location, both locations, or neither location.
+Drop-down visibility controls both account panels and provider filter buttons.
+Saved choices survive relaunch. Hidden providers retain their quota refreshes, usage history, and alert settings.
+Settings remains accessible after you hide every provider.
 
 ## Quota reset alerts
 

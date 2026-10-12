@@ -1,8 +1,39 @@
 import AppKit
 import XCTest
+import CLIProxyBarCore
 @testable import MenuBar
 
 final class MenuShortcutTests: XCTestCase {
+    @MainActor
+    func testMenuOpeningUsesCurrentDefaultAndOptionSelectsOtherView() throws {
+        var expandedDefault = false
+        let snapshot = StatusBarMenuSnapshot(connectionMessage: "Fixture", isLocalProxyMode: true, proxyPort: 8317,
+            isProxyRunning: true, tunnel: CloudflareTunnelSnapshot(), providers: [], selectedProvider: nil,
+            isLoadingQuotas: false, displaySettings: StatusBarMenuDisplaySettings(quotaDisplayMode: .used,
+                quotaDisplayStyle: .lowestBar, hideSensitiveInfo: false, modelAggregationMode: .lowest),
+            appearanceMode: .system, language: .english, hiddenProviderCount: 1)
+        let dispatcher = StatusBarCommandDispatcher(handlers: StatusBarCommandHandlers(
+            refreshAll: {}, refreshProvider: { _ in }, refreshAccount: { _ in },
+            toggleProxy: {}, toggleTunnel: { _ in }, copyText: { _ in }, switchAntigravityAccount: { _ in },
+            isAntigravityIDERunning: { false }, confirmAntigravitySwitch: { _, _ in false },
+            selectProvider: { _ in }, settings: {}, openApp: {}, quit: {}, menuNeedsRebuild: {}))
+        let manager = StatusBarManager()
+        manager.configureMenu(snapshotProvider: { snapshot }, commandDispatcher: dispatcher,
+            defaultExpanded: { expandedDefault })
+        let menu = NSMenu()
+        for (defaultValue, option, expectedWidth) in [
+            (false, false, 280.0), (false, true, 360.0),
+            (true, false, 360.0), (true, true, 280.0), (false, false, 280.0)
+        ] {
+            expandedDefault = defaultValue
+            manager.prepareMenuForOpening(menu, optionPressed: option)
+            let views = menu.items.compactMap(\.view)
+            XCTAssertEqual(views.count, 2)
+            XCTAssertTrue(views.allSatisfy { $0.frame.width == expectedWidth })
+            XCTAssertNotNil(menu.items.first { $0.keyEquivalent == "," })
+        }
+    }
+
     @MainActor
     func testRefreshShortcutConsumesEventWithoutNativeAction() async throws {
         let refreshed = expectation(description: "Refresh dispatched")

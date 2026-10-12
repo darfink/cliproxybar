@@ -24,8 +24,11 @@ struct StatusBarMenuProviderSnapshot: Equatable, Sendable {
 
     @MainActor
     static func grouping(_ accounts: [ProxyAccount], refreshing: Bool,
+                         isVisible: (QuotaProvider) -> Bool = { _ in true },
                          usage: (ProxyAccount) -> ProxyUsageSnapshot? = { _ in nil }) -> [Self] {
-        let groups = Dictionary(grouping: accounts.filter { QuotaProvider(rawValue: $0.provider) != nil },
+        let groups = Dictionary(grouping: accounts.filter {
+            QuotaProvider(rawValue: $0.provider).map(isVisible) ?? false
+        },
                                 by: { QuotaProvider(rawValue: $0.provider)! })
         return groups.keys.sorted { $0.rawValue < $1.rawValue }.map { provider in
             Self(provider: provider, accounts: (groups[provider] ?? []).map { account in
@@ -72,4 +75,5 @@ public struct StatusBarMenuSnapshot: Equatable, Sendable {
     let language: AppLanguage
     var proxyAddress: String? = nil
     var quotaDiscoveryIssue: String? = nil
+    var hiddenProviderCount: Int = 0
 }

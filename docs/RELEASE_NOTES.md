@@ -1,12 +1,18 @@
-CLIProxyBar 0.4.2 suppresses redundant reset alerts:
+CLIProxyBar 0.4.3 adds menu choices and OpenCode Go pace estimates:
 
-- Timed windows that already show 0% usage reset silently, without a notification or confetti.
-- Reset alerts use the last reading before the deadline. Usage in a new window cannot trigger an alert for an unused window.
-- Silent resets remain recorded after relaunch. Later resets of used windows still trigger alerts.
-- Reset history from earlier versions remains compatible.
+- Independent provider visibility in the menu bar and drop-down, including plugin providers.
+- Compact or expanded default view. Option-click opens the other view. Compact remains the initial default.
+- Optional single percentage for the quota window closest to its limit. Paired percentages remain the initial default.
+- OpenCode Go pace estimates for the five-hour rolling window and weekly quota.
+- Monthly pace for OpenCode Go when the UTC billing cycle is unambiguous, with the actual month length.
+- Gemini API-key accounts from Google AI Studio, with optional usage history. CLIProxyAPI currently supplies no allowance quotas for these keys.
 
-The reset tests cover session, weekly, and monthly limits, delayed confirmation, percentage rounding, and relaunch behavior.
-Rolling alerts still require a full refill after usage.
+Display choices survive relaunch. Hidden providers retain their quota refreshes, usage history, and alert settings.
+The drop-down keeps the full quota breakdown after you select a single percentage for the menu bar.
+If you hide every provider, Settings remains accessible.
+CLIProxyBar keeps Gemini key values out of its account records and quota cache.
+
+Tests cover display persistence, Option-click behavior, provider visibility, Gemini account discovery, and billing cycles across short months and leap years.
 
 Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in updater.
 

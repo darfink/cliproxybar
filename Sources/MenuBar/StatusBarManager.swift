@@ -42,6 +42,7 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
     
     private var menuSnapshotProvider: (@MainActor () -> StatusBarMenuSnapshot)?
     private var commandDispatcher: StatusBarCommandDispatcher?
+    private var defaultExpanded: @MainActor () -> Bool = { false }
 
     public override init() {
         super.init()
@@ -49,10 +50,12 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
     
     public func configureMenu(
         snapshotProvider: @escaping @MainActor () -> StatusBarMenuSnapshot,
-        commandDispatcher: StatusBarCommandDispatcher
+        commandDispatcher: StatusBarCommandDispatcher,
+        defaultExpanded: @escaping @MainActor () -> Bool = { false }
     ) {
         menuSnapshotProvider = snapshotProvider
         self.commandDispatcher = commandDispatcher
+        self.defaultExpanded = defaultExpanded
     }
     
     /// Highest backing scale factor across all active screens to ensure sharp rendering in multi-monitor setups
@@ -213,7 +216,11 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
     // MARK: - NSMenuDelegate
     
     public func menuWillOpen(_ menu: NSMenu) {
-        isExpandedMenu = NSEvent.modifierFlags.contains(.option)
+        prepareMenuForOpening(menu, optionPressed: NSEvent.modifierFlags.contains(.option))
+    }
+
+    func prepareMenuForOpening(_ menu: NSMenu, optionPressed: Bool) {
+        isExpandedMenu = defaultExpanded() != optionPressed
         hasPendingMenuRebuild = false
         renderStatusBar()
         performMenuRebuild(using: menu)

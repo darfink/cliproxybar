@@ -139,7 +139,8 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(appItem)
         NSApplication.shared.mainMenu = mainMenu
         if CommandLine.arguments.contains("--settings") { settingsWindow.show() }
-        statusBar.configureMenu(snapshotProvider: { [unowned self] in snapshot() }, commandDispatcher: commands)
+        statusBar.configureMenu(snapshotProvider: { [unowned self] in snapshot() }, commandDispatcher: commands,
+            defaultExpanded: { [unowned self] in preferences.defaultMenuView == .expanded })
         render()
         do { _ = try ManagementKey.read() }
         catch LocalClientError.missingKey { settingsWindow.show() }
@@ -321,15 +322,22 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         }
     }
     func snapshot() -> StatusBarMenuSnapshot {
-        let providers = StatusBarMenuProviderSnapshot.grouping(accounts, refreshing: refreshing) { usageCollector.snapshot(for: $0) }
-        return StatusBarMenuSnapshot(connectionMessage: message, isLocalProxyMode: client.isLoopback, proxyPort: UInt16(client.baseURL.port ?? client.defaultPort), isProxyRunning: connected, tunnel: CloudflareTunnelSnapshot(), providers: providers, selectedProvider: selected, isLoadingQuotas: refreshing, displaySettings: StatusBarMenuDisplaySettings(quotaDisplayMode: preferences.mode, quotaDisplayStyle: .lowestBar, hideSensitiveInfo: false, modelAggregationMode: .lowest), appearanceMode: .system, language: .english, proxyAddress: client.displayAddress, quotaDiscoveryIssue: quotaDiscoveryIssue)
+        let providers = StatusBarMenuProviderSnapshot.grouping(accounts, refreshing: refreshing,
+            isVisible: preferences.showsInDropdown) { usageCollector.snapshot(for: $0) }
+        let hiddenCount = Set(accounts.compactMap { QuotaProvider(rawValue: $0.provider) })
+            .filter { !preferences.showsInDropdown($0) }.count
+        let visibleSelection = selected.flatMap { selected in
+            providers.contains { $0.provider == selected } ? selected : nil
+        }
+        return StatusBarMenuSnapshot(connectionMessage: message, isLocalProxyMode: client.isLoopback, proxyPort: UInt16(client.baseURL.port ?? client.defaultPort), isProxyRunning: connected, tunnel: CloudflareTunnelSnapshot(), providers: providers, selectedProvider: visibleSelection, isLoadingQuotas: refreshing, displaySettings: StatusBarMenuDisplaySettings(quotaDisplayMode: preferences.mode, quotaDisplayStyle: .lowestBar, hideSensitiveInfo: false, modelAggregationMode: .lowest), appearanceMode: .system, language: .english, proxyAddress: client.displayAddress, quotaDiscoveryIssue: quotaDiscoveryIssue, hiddenProviderCount: hiddenCount)
     }
     func render() {
+        if let selected, !preferences.showsInDropdown(selected) { self.selected = nil }
         let hasReadings = accounts.contains { $0.providerQuota().models.contains { $0.percentage >= 0 } }
         let items = accounts.compactMap { account -> MenuBarQuotaDisplayItem? in
             guard let provider = QuotaProvider(rawValue: account.provider), preferences.showsInMenuBar(provider) else { return nil }
             let quota = account.providerQuota()
-            return MenuBarQuotaDisplayItem(id: account.name, providerSymbol: provider.menuBarSymbol, accountShort: "", percentage: quota.models.map(\.percentage).filter { $0 >= 0 }.min() ?? -1, provider: provider, isForbidden: quota.isForbidden, quotaPair: MenuBarQuotaPair.resolve(for: provider, from: quota.models))
+            return MenuBarQuotaDisplayItem(id: account.name, providerSymbol: provider.menuBarSymbol, accountShort: "", percentage: quota.models.map(\.percentage).filter { $0 >= 0 }.min() ?? -1, provider: provider, isForbidden: quota.isForbidden, quotaPair: preferences.showsBothMenuBarQuotas ? MenuBarQuotaPair.resolve(for: provider, from: quota.models) : nil)
         }
         statusBar.updateStatusBar(items: items, colorMode: .monochrome, quotaDisplayMode: preferences.mode, isRunning: connected || hasReadings, showMenuBarIcon: true, showQuota: hasReadings, appearanceMode: .system, language: .english, isRefreshing: refreshing)
         statusBar.rebuildMenuInPlace()

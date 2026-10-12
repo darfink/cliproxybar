@@ -45,4 +45,37 @@ final class QuotaPaceTests: XCTestCase {
         let pace = try XCTUnwrap(QuotaPace.calculate(metric: quota.models[0], observedAt: now, now: now))
         XCTAssertEqual(pace.expectedUsedPercent, 75)
     }
+    func testOpenCodeRollingPaceUsesBackendResetAndFiveHourDuration() throws {
+        let reset = ISO8601DateFormatter().string(from: now.addingTimeInterval(10800))
+        let body = try JSONSerialization.data(withJSONObject: ["groups": [["buckets": [
+            ["window": "rolling", "remainingFraction": 0.75, "resetTime": reset],
+            ["window": "monthly", "remainingFraction": 0.51]
+        ]]]])
+        let quota = try PluginQuotaParser.parse(body, provider: "opencode-go", now: now)
+        let rolling = try XCTUnwrap(quota.models.first)
+        XCTAssertEqual(rolling.resetTime, reset)
+        let pace = try XCTUnwrap(QuotaPace.calculate(metric: rolling, observedAt: now, now: now))
+        XCTAssertEqual(pace.expectedUsedPercent, 40, accuracy: 0.001)
+        XCTAssertEqual(pace.reservePoints, 15, accuracy: 0.001)
+        XCTAssertEqual(pace.markerPercent(mode: .used), 40, accuracy: 0.001)
+        XCTAssertEqual(pace.markerPercent(mode: .remaining), 60, accuracy: 0.001)
+        XCTAssertTrue(pace.lastsUntilReset)
+        let monthly = try XCTUnwrap(quota.models.last)
+        XCTAssertNil(QuotaPace.calculate(metric: monthly, observedAt: now, now: now))
+        XCTAssertNil(QuotaPace.calculate(metric: rolling, observedAt: now, now: now.addingTimeInterval(901)))
+        let unrelated = try PluginQuotaParser.parse(body, provider: "another-plugin", now: now)
+        XCTAssertTrue(unrelated.models.allSatisfy { $0.windowDuration == nil })
+    }
+    func testOpenCodeRollingPaceRequiresUsableBackendReset() throws {
+        for offset in [nil, -1.0, 18001.0] as [Double?] {
+            var bucket: [String: Any] = ["window": "rolling", "remainingFraction": 0.75]
+            if let offset {
+                bucket["resetTime"] = ISO8601DateFormatter().string(from: now.addingTimeInterval(offset))
+            }
+            let body = try JSONSerialization.data(withJSONObject: ["groups": [["buckets": [bucket]]]])
+            let quota = try PluginQuotaParser.parse(body, provider: "opencode-go", now: now)
+            let rolling = try XCTUnwrap(quota.models.first)
+            XCTAssertNil(QuotaPace.calculate(metric: rolling, observedAt: now, now: now))
+        }
+    }
 }

@@ -3,13 +3,13 @@ import CLIProxyBarCore
 @testable import MenuBar
 
 final class PluginQuotaTests: XCTestCase {
-    @MainActor func testNativeQuotaWindowsAndUnknownDurations() throws {
+    @MainActor func testNativeQuotaWindowsUseKnownDurationsOnly() throws {
         let body = #"{"subscription":{"plan":"Go"},"groups":[{"buckets":[{"window":"rolling","remainingFraction":0.75,"resetTime":"2026-10-01T00:00:00Z"},{"window":"weekly","remainingFraction":0},{"window":"monthly","remainingFraction":1}]}]}"#
         let quota = try ActiveQuotaParser.parsePlugin(Data(body.utf8))
         XCTAssertEqual(quota.models.map(\.percentage), [75, 0, 100])
         XCTAssertEqual(quota.models.map(\.displayName), ["Rolling", "Weekly", "Monthly"])
         XCTAssertEqual(quota.planType, "Go")
-        XCTAssertNil(quota.models[0].windowDuration)
+        XCTAssertEqual(quota.models[0].windowDuration, 18000)
         XCTAssertEqual(quota.models[1].windowDuration, 604800)
         XCTAssertNil(quota.models[2].windowDuration)
     }

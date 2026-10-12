@@ -2,6 +2,11 @@ import Foundation
 import Observation
 import CLIProxyBarCore
 
+enum MenuViewMode: String {
+    case compact
+    case expanded
+}
+
 @MainActor
 @Observable
 final class DisplayPreferences {
@@ -22,6 +27,7 @@ final class DisplayPreferences {
     @ObservationIgnored var onResetAlertsChange: (() -> Void)?
     private(set) var endpoint: String
     private(set) var hiddenMenuBarProviders: Set<String>
+    private(set) var hiddenDropdownProviders: Set<String>
     private(set) var availableProviders: [QuotaProvider] = QuotaProvider.allCases.filter { ActiveQuotaParser.supports($0.rawValue) }
     private(set) var providerNames: [QuotaProvider: String] = [:]
 
@@ -49,6 +55,17 @@ final class DisplayPreferences {
         onChange?()
     }
 
+    func showsInDropdown(_ provider: QuotaProvider) -> Bool {
+        !hiddenDropdownProviders.contains(provider.rawValue)
+    }
+
+    func setDropdownVisible(_ visible: Bool, for provider: QuotaProvider) {
+        guard visible != showsInDropdown(provider) else { return }
+        if visible { hiddenDropdownProviders.remove(provider.rawValue) }
+        else { hiddenDropdownProviders.insert(provider.rawValue) }
+        defaults.set(hiddenDropdownProviders.sorted(), forKey: "hiddenDropdownProviders")
+        onChange?()
+    }
 
     func saveEndpoint(_ input: String) throws {
         let client = try LocalProxyClient(endpoint: input.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -62,6 +79,20 @@ final class DisplayPreferences {
     var mode: QuotaDisplayMode {
         didSet {
             defaults.set(mode.rawValue, forKey: "quotaDisplayMode")
+            onChange?()
+        }
+    }
+    var showsBothMenuBarQuotas: Bool {
+        didSet {
+            guard oldValue != showsBothMenuBarQuotas else { return }
+            defaults.set(showsBothMenuBarQuotas, forKey: "showsBothMenuBarQuotas")
+            onChange?()
+        }
+    }
+    var defaultMenuView: MenuViewMode {
+        didSet {
+            guard oldValue != defaultMenuView else { return }
+            defaults.set(defaultMenuView.rawValue, forKey: "defaultMenuView")
             onChange?()
         }
     }
@@ -96,8 +127,12 @@ final class DisplayPreferences {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         hiddenMenuBarProviders = Set(defaults.stringArray(forKey: "hiddenMenuBarProviders") ?? [])
+        hiddenDropdownProviders = Set(defaults.stringArray(forKey: "hiddenDropdownProviders") ?? [])
         endpoint = defaults.string(forKey: "endpoint") ?? "http://127.0.0.1:8317"
         mode = defaults.string(forKey: "quotaDisplayMode").flatMap(QuotaDisplayMode.init(rawValue:)) ?? .used
+        showsBothMenuBarQuotas = defaults.object(forKey: "showsBothMenuBarQuotas") == nil
+            ? true : defaults.bool(forKey: "showsBothMenuBarQuotas")
+        defaultMenuView = defaults.string(forKey: "defaultMenuView").flatMap(MenuViewMode.init(rawValue:)) ?? .compact
         tracksProxyUsage = defaults.bool(forKey: "tracksProxyUsage")
         notifiesShortResets = defaults.bool(forKey: "notifiesShortResets")
         notifiesLongResets = defaults.bool(forKey: "notifiesLongResets")

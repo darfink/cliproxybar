@@ -78,19 +78,22 @@ private struct DisplaySettingsView: View {
                     .labelsHidden()
                     Text(preferences.mode == .used ? "Shows how much of your quota you’ve used." : "Shows how much of your quota is left.")
                         .font(.callout).foregroundStyle(.secondary)
-                    Divider()
-                    Text("Providers in the menu bar").font(.headline)
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(preferences.availableProviders) { provider in
-                            Toggle(preferences.providerName(provider), isOn: Binding(
-                                get: { preferences.showsInMenuBar(provider) },
-                                set: { preferences.setMenuBarVisible($0, for: provider) }
-                            ))
-                            .toggleStyle(.checkbox)
-                        }
-                    }
-                    Text("The dropdown still shows every account. Turn all off for just the app icon.")
+                    Toggle("Show both quota windows in the menu bar", isOn: $preferences.showsBothMenuBarQuotas)
+                        .toggleStyle(.checkbox)
+                    Text("For paired quotas, shows two percentages. Turn off to show the window closest to its limit.")
                         .font(.caption).foregroundStyle(.secondary)
+                    Divider()
+                    Text("Default menu view").font(.headline)
+                    Picker("Default menu view", selection: $preferences.defaultMenuView) {
+                        Text("Compact").tag(MenuViewMode.compact)
+                        Text("Expanded").tag(MenuViewMode.expanded)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    Text(preferences.defaultMenuView == .compact ? "Option-click opens the expanded view." : "Option-click opens the compact view.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Divider()
+                    ProviderVisibilitySettingsView(preferences: preferences)
                     Divider()
                     Text("Quota reset alerts").font(.headline)
                     Toggle("Notify for session and rolling resets", isOn: $preferences.notifiesShortResets)

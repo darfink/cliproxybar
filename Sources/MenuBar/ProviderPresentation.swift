@@ -23,7 +23,7 @@ public extension QuotaProvider {
         case .glm: "Z.ai"
         case .warp: "Warp"
         case .clinePass: "ClinePass"
-        case .gemini: "Gemini CLI"
+        case .gemini: "Gemini"
         case .kimi: "Kimi"
         case .meta: "Meta"
         case .aistudio: "AI Studio"

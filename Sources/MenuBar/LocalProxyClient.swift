@@ -3,6 +3,21 @@ import Security
 import CLIProxyBarCore
 
 struct AuthEnvelope: Decodable, Sendable { let files: [ProxyAccount] }
+private struct GeminiAPIKeyEnvelope: Decodable {
+    struct Entry: Decodable {
+        let authIndex: String?
+        let name: String?
+        let label: String?
+        let disabled: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case authIndex = "auth-index"
+            case name, label, disabled
+        }
+    }
+    let entries: [Entry]?
+    enum CodingKeys: String, CodingKey { case entries = "gemini-api-key" }
+}
 struct QuotaSignals: Decodable, Sendable {
     let observed_at: String?
     let signals: [String: String]?
@@ -156,7 +171,28 @@ struct LocalProxyClient: Sendable {
         baseURL = url
     }
     func fetch() async throws -> [ProxyAccount] {
-        try JSONDecoder().decode(AuthEnvelope.self, from: await send(path: "auth-files")).files
+        let accounts = try JSONDecoder().decode(AuthEnvelope.self, from: await send(path: "auth-files")).files
+        let envelope: GeminiAPIKeyEnvelope
+        do {
+            envelope = try JSONDecoder().decode(GeminiAPIKeyEnvelope.self, from: await send(path: "gemini-api-key"))
+        } catch LocalClientError.http(let status) where status == 404 || status == 501 {
+            return accounts
+        }
+        // Configuration API keys are absent from auth-files. Decode only display
+        // metadata and the runtime index; provider key values never enter accounts.
+        var seen = Set(accounts.filter { QuotaProvider(rawValue: $0.provider) == .gemini }.compactMap(\.auth_index))
+        let entries = envelope.entries ?? []
+        var result = accounts
+        for (index, entry) in entries.enumerated() {
+            guard let authIndex = PluginQuotaParser.text(entry.authIndex), seen.insert(authIndex).inserted else { continue }
+            var account = ProxyAccount(name: "gemini-apikey-" + ProxyUsageHistory.digest(authIndex), provider: "gemini",
+                email: nil, disabled: entry.disabled, unavailable: nil, quota: nil, model_quotas: nil)
+            account.label = PluginQuotaParser.text(entry.label, entry.name)
+                ?? ("Google AI Studio" + (entries.count > 1 ? " \(index + 1)" : ""))
+            account.auth_index = authIndex
+            result.append(account)
+        }
+        return result
     }
 
     func enableUsageStatistics() async throws {

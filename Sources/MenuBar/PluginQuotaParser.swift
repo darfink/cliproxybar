@@ -90,9 +90,10 @@ enum PluginQuotaParser {
                 let resetDate = ProxyAccount.observationDate(rawReset)
                 let reset = resetDate == .distantPast ? "" : ISO8601DateFormatter()
                     .string(from: resetDate.addingTimeInterval(-offset / 1000))
-                // The generic contract does not describe fixed versus rolling windows.
-                // OpenCode Go's weekly limit is known; unfamiliar plugins get no guessed pace.
-                let duration: TimeInterval? = isOpenCode && window == "weekly" ? 604800 : nil
+                // Keep provider timing rules isolated until the generic contract exposes them.
+                // Infer billing dates in the server's UTC clock before correcting its offset.
+                let duration = isOpenCode ? OpenCodeQuotaTiming.duration(window: window, resetAt: resetDate,
+                    observedAt: now.addingTimeInterval(offset / 1000)) : nil
                 models.append(QuotaMetric(name: name, percentage: remaining * 100, resetTime: reset,
                     tooltip: description, windowDuration: duration, label: label.isEmpty ? "Quota" : label))
             }
