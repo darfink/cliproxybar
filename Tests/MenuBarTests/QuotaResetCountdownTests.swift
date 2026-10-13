@@ -121,12 +121,14 @@ final class QuotaResetCountdownTests: XCTestCase {
         let menuBar = StatusBarQuotaView(items: [item], colorMode: .monochrome, quotaDisplayMode: .used, now: observed)
         let compact = CompactQuotaAccountView(provider: .claude, providerName: "Claude Code", account: account,
             showAccountName: false, displayMode: .used, showsResetCountdown: true).frame(width: 280)
-        let barImage = try XCTUnwrap(ImageRenderer(content: menuBar).cgImage)
-        XCTAssertLessThan(barImage.width, 80)
-        XCTAssertEqual(barImage.height, 22)
-        let menuImage = try XCTUnwrap(ImageRenderer(content: compact).cgImage)
-        XCTAssertEqual(menuImage.width, 280)
-        XCTAssertLessThan(menuImage.height, 120)
+        // Size checks also run on Intel CI's virtual GPU. Raster exports are
+        // opt-in because that device cannot run SwiftUI's Metal renderer.
+        let barLayout = NSHostingView(rootView: menuBar).intrinsicContentSize
+        XCTAssertLessThan(barLayout.width, 80)
+        XCTAssertEqual(barLayout.height, 22)
+        let menuLayout = NSHostingView(rootView: compact).intrinsicContentSize
+        XCTAssertEqual(menuLayout.width, 280)
+        XCTAssertLessThan(menuLayout.height, 120)
         if let path = ProcessInfo.processInfo.environment["CLIPROXYBAR_RESET_COUNTDOWN_PREVIEW"] {
             for (suffix, scheme) in [("light", ColorScheme.light), ("dark", ColorScheme.dark)] {
                 let preview = VStack(alignment: .leading, spacing: 12) {
