@@ -64,13 +64,16 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     var resetRefreshTask: Task<Void, Never>?
     var resetMonitor: QuotaResetMonitor
     var usageCollector: ProxyUsageCollector
+    var quotaHistory: QuotaHistoryRecorder
     init(client: LocalProxyClient) {
         self.client = client
         cache = QuotaCache(endpoint: client.baseURL.absoluteString)
         resetMonitor = QuotaResetMonitor(endpoint: client.baseURL.absoluteString)
         try? resetMonitor.load()
         usageCollector = ProxyUsageCollector(client: client)
+        quotaHistory = QuotaHistoryRecorder(endpoint: client.baseURL.absoluteString)
         super.init()
+        quotaHistory.isEnabled = preferences.recordsQuotaHistory
         do {
             accounts = try cache.load()
             preferences.updateAvailableProviders(accounts)
@@ -104,6 +107,12 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         preferences.onChange = { [weak self] in self?.render() }
         preferences.onEndpointChange = { [weak self] in self?.applyEndpoint() }
         preferences.onUsageTrackingChange = { [weak self] in self?.applyUsageTracking() }
+        preferences.onQuotaHistoryChange = { [weak self] in
+            guard let self else { return }
+            self.quotaHistory.save()
+            self.quotaHistory.isEnabled = self.preferences.recordsQuotaHistory
+            self.render()
+        }
         preferences.onResetAlertsChange = { [weak self] in
             guard let self else { return }
             Task { await self.resetAlerts.updateAuthorization(requestIfNeeded:
@@ -177,6 +186,9 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         client = newClient
         usageCollector.stop()
         usageCollector = ProxyUsageCollector(client: newClient)
+        quotaHistory.save()
+        quotaHistory = QuotaHistoryRecorder(endpoint: newClient.baseURL.absoluteString)
+        quotaHistory.isEnabled = preferences.recordsQuotaHistory
         usageCollector.onChange = { [weak self] in self?.statusBar.invalidateMenuContent() }
         applyUsageTracking()
         cache = QuotaCache(endpoint: newClient.baseURL.absoluteString)
@@ -260,6 +272,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
                         accounts[index].recordQuota(quota)
                         fetchedCount += 1
                         if !CommandLine.arguments.contains("--smoke-test") {
+                            quotaHistory.record(account: accounts[index], quota: quota)
                             resetEvents += resetMonitor.observe(account: accounts[index], quota: quota)
                         }
                     } else if let issue { accounts[index].recordQuotaFailure(issue, unsupported: unsupported) }
@@ -275,6 +288,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
             do { try cache.save(accounts) }
             catch { message += "\nCould not save readings for the next launch." }
             if !CommandLine.arguments.contains("--smoke-test") {
+                quotaHistory.save()
                 do {
                     try resetMonitor.save()
                     await resetAlerts.deliver(resetEvents, preferences: preferences)
@@ -323,13 +337,13 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     }
     func snapshot() -> StatusBarMenuSnapshot {
         let providers = StatusBarMenuProviderSnapshot.grouping(accounts, refreshing: refreshing,
-            isVisible: preferences.showsInDropdown) { usageCollector.snapshot(for: $0) }
+            isVisible: preferences.showsInDropdown, quotaHistory: { quotaHistory.snapshot(for: $0) }) { usageCollector.snapshot(for: $0) }
         let hiddenCount = Set(accounts.compactMap { QuotaProvider(rawValue: $0.provider) })
             .filter { !preferences.showsInDropdown($0) }.count
         let visibleSelection = selected.flatMap { selected in
             providers.contains { $0.provider == selected } ? selected : nil
         }
-        return StatusBarMenuSnapshot(connectionMessage: message, isLocalProxyMode: client.isLoopback, proxyPort: UInt16(client.baseURL.port ?? client.defaultPort), isProxyRunning: connected, tunnel: CloudflareTunnelSnapshot(), providers: providers, selectedProvider: visibleSelection, isLoadingQuotas: refreshing, displaySettings: StatusBarMenuDisplaySettings(quotaDisplayMode: preferences.mode, quotaDisplayStyle: .lowestBar, hideSensitiveInfo: false, modelAggregationMode: .lowest), appearanceMode: .system, language: .english, proxyAddress: client.displayAddress, quotaDiscoveryIssue: quotaDiscoveryIssue, hiddenProviderCount: hiddenCount)
+        return StatusBarMenuSnapshot(connectionMessage: message, isLocalProxyMode: client.isLoopback, proxyPort: UInt16(client.baseURL.port ?? client.defaultPort), isProxyRunning: connected, tunnel: CloudflareTunnelSnapshot(), providers: providers, selectedProvider: visibleSelection, isLoadingQuotas: refreshing, displaySettings: StatusBarMenuDisplaySettings(quotaDisplayMode: preferences.mode, quotaDisplayStyle: .lowestBar, hideSensitiveInfo: false, modelAggregationMode: .lowest, showsResetCountdownInCompactMenu: preferences.showsResetCountdownInCompactMenu), appearanceMode: .system, language: .english, proxyAddress: client.displayAddress, quotaDiscoveryIssue: quotaDiscoveryIssue, hiddenProviderCount: hiddenCount)
     }
     func render() {
         if let selected, !preferences.showsInDropdown(selected) { self.selected = nil }
@@ -337,7 +351,8 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         let items = accounts.compactMap { account -> MenuBarQuotaDisplayItem? in
             guard let provider = QuotaProvider(rawValue: account.provider), preferences.showsInMenuBar(provider) else { return nil }
             let quota = account.providerQuota()
-            return MenuBarQuotaDisplayItem(id: account.name, providerSymbol: provider.menuBarSymbol, accountShort: "", percentage: quota.models.map(\.percentage).filter { $0 >= 0 }.min() ?? -1, provider: provider, isForbidden: quota.isForbidden, quotaPair: preferences.showsBothMenuBarQuotas ? MenuBarQuotaPair.resolve(for: provider, from: quota.models) : nil)
+            let lowest = MenuBarQuotaMetric.lowest(in: quota.models, labelKey: "")
+            return MenuBarQuotaDisplayItem(id: account.name, providerSymbol: provider.menuBarSymbol, accountShort: "", percentage: lowest?.remainingPercentage ?? -1, provider: provider, isForbidden: quota.isForbidden, quotaPair: preferences.showsBothMenuBarQuotas ? MenuBarQuotaPair.resolve(for: provider, from: quota.models) : nil, resetAt: lowest?.resetAt, showsResetCountdown: preferences.showsResetCountdownInMenuBar)
         }
         statusBar.updateStatusBar(items: items, colorMode: .monochrome, quotaDisplayMode: preferences.mode, isRunning: connected || hasReadings, showMenuBarIcon: true, showQuota: hasReadings, appearanceMode: .system, language: .english, isRefreshing: refreshing)
         statusBar.rebuildMenuInPlace()

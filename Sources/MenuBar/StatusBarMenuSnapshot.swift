@@ -12,6 +12,7 @@ struct StatusBarMenuAccountSnapshot: Equatable, Sendable {
     var refreshIssue: String? = nil
     var proxyUsage: ProxyUsageSnapshot? = nil
     var quotaReadState: QuotaReadState = .current
+    var quotaHistory: QuotaHistorySnapshot? = nil
 }
 
 struct StatusBarMenuProviderSnapshot: Equatable, Sendable {
@@ -25,6 +26,7 @@ struct StatusBarMenuProviderSnapshot: Equatable, Sendable {
     @MainActor
     static func grouping(_ accounts: [ProxyAccount], refreshing: Bool,
                          isVisible: (QuotaProvider) -> Bool = { _ in true },
+                         quotaHistory: (ProxyAccount) -> QuotaHistorySnapshot? = { _ in nil },
                          usage: (ProxyAccount) -> ProxyUsageSnapshot? = { _ in nil }) -> [Self] {
         let groups = Dictionary(grouping: accounts.filter {
             QuotaProvider(rawValue: $0.provider).map(isVisible) ?? false
@@ -35,7 +37,8 @@ struct StatusBarMenuProviderSnapshot: Equatable, Sendable {
                 StatusBarMenuAccountSnapshot(id: QuotaAccountID(provider: provider, accountKey: account.name),
                     email: account.displayName, quota: account.providerQuota(), subscription: nil,
                     isActiveInIDE: false, isRefreshing: refreshing, isRefreshBlocked: refreshing,
-                    refreshIssue: account.quotaIssue, proxyUsage: usage(account), quotaReadState: account.quotaReadState)
+                    refreshIssue: account.quotaIssue, proxyUsage: usage(account), quotaReadState: account.quotaReadState,
+                    quotaHistory: quotaHistory(account))
             }, isRefreshing: refreshing, supportsScopedRefresh: true,
                 displayName: groups[provider]?.compactMap(\.providerDisplayName).first)
         }
@@ -47,6 +50,7 @@ struct StatusBarMenuDisplaySettings: Equatable, Sendable {
     let quotaDisplayStyle: QuotaDisplayStyle
     let hideSensitiveInfo: Bool
     let modelAggregationMode: ModelAggregationMode
+    var showsResetCountdownInCompactMenu: Bool = false
 
     func aggregateModelPercentages(_ percentages: [Double]) -> Double {
         let validPercentages = percentages.filter { $0 >= 0 }

@@ -155,6 +155,7 @@ enum ManagementKey {
 
 struct LocalProxyClient: Sendable {
     let baseURL: URL
+    private let claudePlans = ClaudePlanCache()
     var managementKey: @Sendable () throws -> String = { try ManagementKey.read() }
     var transport: (@Sendable (URLRequest) async throws -> (Data, URLResponse))? = nil
     var defaultPort: Int { baseURL.scheme == "https" ? 443 : 80 }
@@ -220,7 +221,7 @@ struct LocalProxyClient: Sendable {
             catch LocalClientError.http(501) { throw LocalClientError.quotaUnsupported }
             var quota = try PluginQuotaParser.parse(data, provider: account.provider)
             quota.accountDisplayName = account.displayName
-            return quota
+            return await enrichingClaudePlan(quota, for: account)
         }
         if account.provider == "antigravity" {
             // loadCodeAssist supplies the project without exporting OAuth credentials.
@@ -243,23 +244,33 @@ struct LocalProxyClient: Sendable {
         let body = try await apiCall(ActiveQuotaParser.request(for: account))
         var quota = try ActiveQuotaParser.parse(body, provider: account.provider)
         quota.accountDisplayName = account.displayName
-        return quota
+        return await enrichingClaudePlan(quota, for: account)
     }
 
-    private func apiCall(_ call: ProxyAPICall) async throws -> Data {
-        let data = try await send(path: "api-call", body: JSONEncoder().encode(call))
+    private func enrichingClaudePlan(_ quota: ProviderQuota, for account: ProxyAccount) async -> ProviderQuota {
+        guard account.provider == "claude", PluginQuotaParser.text(quota.planType) == nil else { return quota }
+        var enriched = quota
+        enriched.planType = await claudePlans.plan(for: account.identity, fallback: account.providerQuota().planType) {
+            let body = try await apiCall(ClaudePlanParser.request(for: account), timeout: 5)
+            return try ClaudePlanParser.parse(body)
+        }
+        return enriched
+    }
+
+    private func apiCall(_ call: ProxyAPICall, timeout: TimeInterval = 20) async throws -> Data {
+        let data = try await send(path: "api-call", body: JSONEncoder().encode(call), timeout: timeout)
         let result = try JSONDecoder().decode(ProxyAPICallResult.self, from: data)
         guard (200...299).contains(result.statusCode) else { throw LocalClientError.providerHTTP(result.statusCode) }
         guard let body = result.body?.data(using: .utf8) else { throw LocalClientError.noQuotaData }
         return body
     }
 
-    private func send(path: String, body: Data? = nil, method: String = "POST", query: [URLQueryItem] = []) async throws -> Data {
+    private func send(path: String, body: Data? = nil, method: String = "POST", query: [URLQueryItem] = [], timeout: TimeInterval = 20) async throws -> Data {
         var components = URLComponents(url: baseURL.appendingPathComponent("v0/management/" + path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query }
         var request = URLRequest(url: components.url!)
         request.setValue("Bearer " + (try managementKey()), forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 20
+        request.timeoutInterval = timeout
         if let body {
             request.httpMethod = method
             request.httpBody = body
@@ -267,7 +278,7 @@ struct LocalProxyClient: Sendable {
         }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.connectionProxyDictionary = [:]
-        configuration.timeoutIntervalForResource = 25
+        configuration.timeoutIntervalForResource = timeout + 5
         let session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
         defer { session.invalidateAndCancel() }
         let (data, response): (Data, URLResponse)

@@ -24,6 +24,7 @@ final class DisplayPreferences {
     @ObservationIgnored var onChange: (() -> Void)?
     @ObservationIgnored var onEndpointChange: (() -> Void)?
     @ObservationIgnored var onUsageTrackingChange: (() -> Void)?
+    @ObservationIgnored var onQuotaHistoryChange: (() -> Void)?
     @ObservationIgnored var onResetAlertsChange: (() -> Void)?
     private(set) var endpoint: String
     private(set) var hiddenMenuBarProviders: Set<String>
@@ -96,11 +97,32 @@ final class DisplayPreferences {
             onChange?()
         }
     }
+    var showsResetCountdownInMenuBar: Bool {
+        didSet {
+            guard oldValue != showsResetCountdownInMenuBar else { return }
+            defaults.set(showsResetCountdownInMenuBar, forKey: "showsResetCountdownInMenuBar")
+            onChange?()
+        }
+    }
+    var showsResetCountdownInCompactMenu: Bool {
+        didSet {
+            guard oldValue != showsResetCountdownInCompactMenu else { return }
+            defaults.set(showsResetCountdownInCompactMenu, forKey: "showsResetCountdownInCompactMenu")
+            onChange?()
+        }
+    }
     var tracksProxyUsage: Bool {
         didSet {
             guard oldValue != tracksProxyUsage else { return }
             defaults.set(tracksProxyUsage, forKey: "tracksProxyUsage")
             onUsageTrackingChange?()
+        }
+    }
+    var recordsQuotaHistory: Bool {
+        didSet {
+            guard oldValue != recordsQuotaHistory else { return }
+            defaults.set(recordsQuotaHistory, forKey: "recordsQuotaHistory")
+            onQuotaHistoryChange?()
         }
     }
     var notifiesShortResets: Bool {
@@ -133,7 +155,10 @@ final class DisplayPreferences {
         showsBothMenuBarQuotas = defaults.object(forKey: "showsBothMenuBarQuotas") == nil
             ? true : defaults.bool(forKey: "showsBothMenuBarQuotas")
         defaultMenuView = defaults.string(forKey: "defaultMenuView").flatMap(MenuViewMode.init(rawValue:)) ?? .compact
+        showsResetCountdownInMenuBar = defaults.bool(forKey: "showsResetCountdownInMenuBar")
+        showsResetCountdownInCompactMenu = defaults.bool(forKey: "showsResetCountdownInCompactMenu")
         tracksProxyUsage = defaults.bool(forKey: "tracksProxyUsage")
+        recordsQuotaHistory = defaults.object(forKey: "recordsQuotaHistory") == nil ? true : defaults.bool(forKey: "recordsQuotaHistory")
         notifiesShortResets = defaults.bool(forKey: "notifiesShortResets")
         notifiesLongResets = defaults.bool(forKey: "notifiesLongResets")
         celebratesLongResets = defaults.bool(forKey: "celebratesLongResets")

@@ -8,38 +8,46 @@
 CLIProxyBar connects to your local or remote CLIProxyAPI instance and shows quota usage for each account.
 A compact menu keeps the essentials close. An expanded view adds reset times and pace indicators.
 Settings selects the default view. Option-click opens the other view.
+Account hover cards add token totals and quota history graphs, with a remembered tab choice.
 
 ## Screenshots
 
 <table>
   <tr>
     <th>Compact view</th>
-    <th>Option-click for details</th>
+    <th>Expanded view</th>
   </tr>
   <tr>
     <td valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/compact-dark.png">
-        <img src="docs/screenshots/compact.png" width="280" alt="Compact menu with Claude Code, Codex, and OpenCode Go quotas and pace markers">
+        <img src="docs/screenshots/compact.png" width="280" alt="Compact menu with provider quota gauges, pace markers, and an optional countdown for exhausted quota">
       </picture>
     </td>
     <td valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/expanded-dark.png">
-        <img src="docs/screenshots/expanded.png" width="360" alt="Expanded menu with account quotas, pace estimates, reset times, and available resets">
+        <img src="docs/screenshots/expanded.png" width="360" alt="Expanded menu with Claude Pro and Max plan badges, account quotas, pace estimates, and reset times">
       </picture>
     </td>
   </tr>
 </table>
 
-**Usage card**
+**Token history**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/usage-dark.png">
-  <img src="docs/screenshots/usage.png" width="520" alt="Usage card with token totals, Tokens and Requests selector, daily activity, and model totals">
+  <img src="docs/screenshots/usage.png" width="520" alt="Token history tab with daily totals, token counters, activity levels, and model totals">
 </picture>
 
-Images show the current interface with fictional accounts and sample usage.
+**Quota history**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/quota-history-dark.png">
+  <img src="docs/screenshots/quota-history.png" width="520" alt="Quota history tab with session and weekly usage on a shared percentage graph and a compact color legend">
+</picture>
+
+Images show the current interface with fictional accounts, sample usage, and the optional reset countdown.
 Light and dark images follow your color preference.
 
 ## Features
@@ -51,6 +59,10 @@ Light and dark images follow your color preference.
 - Pace markers and reserve or deficit estimates for supported fixed quota windows.
 - Cached readings at launch, followed by fresh provider requests.
 - Account hover panels with optional token history, model totals, and daily activity.
+- Quota history graphs with combined quota windows and 5-hour, 24-hour, 7-day, and 30-day views.
+- Stable history tabs that remember the last selection. Token history is the initial default.
+- Optional reset countdowns for exhausted quotas in the menu bar and compact menu.
+- Claude Pro, Max 5×, and Max 20× plan badges through CLIProxyAPI.
 - One refresh action, a refresh indicator inside the menu, and the ⌘R shortcut.
 - Optional quota reset notifications and confetti for weekly or monthly resets.
 - Local or remote proxy URL and management key settings, available with ⌘,.
@@ -59,7 +71,7 @@ Light and dark images follow your color preference.
 
 | Provider | Windows | Extra information |
 | --- | --- | --- |
-| Claude Code | Five-hour session, weekly | Plan label when CLIProxyAPI supplies it |
+| Claude Code | Five-hour session, weekly | Pro and Max plan labels from the OAuth profile through CLIProxyAPI |
 | Codex | Session, weekly | Plan label and available resets when the provider supplies them |
 | OpenCode Go | Rolling, weekly, monthly | Plan label through the generic plugin quota API |
 | Antigravity | Provider quota groups or per-model limits | Project and plan lookup; response fixtures tested |
@@ -68,6 +80,10 @@ Light and dark images follow your color preference.
 OpenCode Go requires CLIProxyAPI v8 and a plugin that implements the generic quota capability.
 The companion [OpenCode Go plugin](https://github.com/massiveits/opencode-go-cliproxyapi) needs the native quota changes in [upstream pull request #10](https://github.com/massiveits/opencode-go-cliproxyapi/pull/10).
 A plugin version that exposes only its separate quota page does not work with this integration.
+
+Claude plan lookups use CLIProxyAPI's account token substitution. Provider credentials remain in the proxy.
+The app caches plan labels for one hour and retries failed profile lookups after five minutes.
+Profile lookup failures do not prevent quota updates. Existing cached plan labels remain available.
 
 Pace compares used quota with elapsed time in a fixed window. It is an estimate, not a provider guarantee.
 OpenCode Go uses a five-hour rolling window and a seven-day weekly window for pace estimates.
@@ -163,7 +179,7 @@ Versions before 0.2.4 need one manual or Homebrew upgrade to get the built-in up
 | Option-click the menu bar item | Open the other view |
 | ⌘R or Refresh | Fetch quotas for all supported accounts |
 | ⌘, or Settings | Change the display, visible providers, reset alerts, usage collection, proxy URL, or management key |
-| Hover over an account | Show usage and token history |
+| Hover over an account | Show token and quota history |
 | Open Management | Open your proxy's management page in the browser |
 
 Automatic refresh runs every five minutes. A failed request retains the previous reading and shows its status.
@@ -173,6 +189,12 @@ The browser management page handles its own authentication. CLIProxyBar does not
 **Show both quota windows in the menu bar** keeps paired percentages, such as the Claude session and weekly quotas.
 With this setting off, a single percentage shows the quota window closest to its limit.
 The drop-down retains the full quota breakdown.
+
+**When quota is exhausted** has separate reset countdown settings for the menu bar and compact menu.
+Both settings are off by default. An exhausted limit shows a short duration such as `42m`, `3h`, or `2d`.
+Other limits keep their percentages. Countdown labels use the provider reset time and update once a minute without extra quota requests.
+Paired percentages keep separate countdowns. A single percentage uses the latest reset among tied exhausted limits.
+Missing or expired reset times retain the percentage. A limit that merely rounds to 100% usage keeps its percentage.
 
 The **Providers** table has separate **Menu bar** and **Drop-down** checkboxes.
 Each provider can appear in either location, both locations, or neither location.
@@ -198,7 +220,33 @@ The app must be running and connected. It refreshes at known reset times and che
 After sleep, recent resets can be confirmed: up to 15 minutes for sessions and 24 hours for weekly or monthly windows.
 Rolling recovery requires readings no more than 15 minutes apart. Timed alerts require the provider to report a reset time.
 
-## Usage history
+## Quota history
+
+Hover over an account, then select **Quota history**.
+The card fits both panels and keeps its header and height stable when you switch tabs.
+It remembers your last tab choice across accounts and app restarts.
+Token history is the leftmost tab and the default when you have no saved choice.
+Accounts without quota readings show token history without changing that preference.
+The graph shows all quota windows together on a 0–100% scale, with a separate color for each window.
+A small legend below the graph shows each window's color and recorded percentage.
+Choose **5h**, **24h**, **7d**, or **30d** for the time range.
+Lines connect recorded points. Values between points are interpolated, not extra observations.
+Hover over the graph to see each window's nearest recorded percentage and the closest reading's time.
+The graph leaves gaps when readings are more than 15 minutes apart.
+Drops show decreases in reported usage, including quota recovery or resets.
+
+**Settings → Usage history → Record quota history** controls recording independently of token collection.
+Recording is on by default. The app saves fresh quota readings from its existing refreshes, with no extra API requests.
+History starts with those readings. CLIProxyAPI does not supply earlier quota percentage history through its current quota endpoints.
+Cached readings and failed requests do not create new observations.
+The app saves up to 30 days locally, with bounded samples per quota window.
+With recording off, the app retains saved history. Each proxy URL has separate history.
+The history file contains timestamps, percentages, and hashed identifiers. It contains no provider credentials or raw API responses.
+
+Providers without quota percentages, such as Gemini API keys, retain the token history panel.
+The **Token history** tab keeps the existing token totals, activity grid, and model totals.
+
+## Token history
 
 1. Open **Settings** with ⌘,.
 2. Enable **Collect token usage**.
@@ -278,6 +326,13 @@ GitHub Actions runs tests and builds on Apple Silicon and Intel.
 Version tags trigger a verified universal app build, ZIP packaging, checksums, a signed update feed, and a GitHub Release.
 The release workflow also updates the Homebrew cask in this repository.
 Dependabot checks GitHub Actions and Swift dependencies weekly.
+
+The screenshot exporter uses the app's actual views with fictional accounts and sample data.
+Regenerate the light and dark images on macOS with:
+
+```sh
+./scripts/render-readme-screenshots.sh
+```
 
 Existing users of the extracted Quotio Menu Bar keep their display settings, cached readings, and management key during migration.
 The app preserves the legacy Keychain item.

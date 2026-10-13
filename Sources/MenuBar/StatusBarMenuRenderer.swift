@@ -194,7 +194,8 @@ final class StatusBarMenuRenderer {
                     providerName: provider.title,
                     account: account,
                     showAccountName: provider.accounts.count > 1,
-                    displayMode: snapshot.displaySettings.quotaDisplayMode
+                    displayMode: snapshot.displaySettings.quotaDisplayMode,
+                    showsResetCountdown: snapshot.displaySettings.showsResetCountdownInCompactMenu
                 ))
                 attachUsageSubmenu(to: item, account: account)
                 menu.addItem(item)
@@ -275,7 +276,7 @@ final class StatusBarMenuRenderer {
         let isAntigravitySummary = provider == .antigravity
             && account.quota.models.contains { $0.name.hasPrefix("antigravity-") }
 
-        if account.proxyUsage != nil {
+        if account.proxyUsage != nil || account.quotaHistory != nil {
             attachUsageSubmenu(to: item, account: account)
         } else if provider == .codex, let analytics = account.quota.analytics, !analytics.isEmpty {
             let submenu = buildCodexAnalyticsSubmenu(analytics: analytics)
@@ -295,10 +296,11 @@ final class StatusBarMenuRenderer {
     }
 
     private func attachUsageSubmenu(to item: NSMenuItem, account: StatusBarMenuAccountSnapshot) {
-        guard let usage = account.proxyUsage else { return }
+        guard account.proxyUsage != nil || account.quotaHistory != nil else { return }
+        let usage = account.proxyUsage ?? ProxyUsageSnapshot()
         item.submenu = UsageSubmenu(usage: usage, provider: account.id.provider,
             accountName: account.email, anchor: item,
-            appearance: snapshot.appearanceMode.appKitAppearance, locale: snapshot.language.locale)
+            appearance: snapshot.appearanceMode.appKitAppearance, locale: snapshot.language.locale, quotaHistory: account.quotaHistory)
     }
 
     // MARK: - Antigravity Submenu
@@ -405,15 +407,26 @@ private struct CompactMenuButtonStyle: ButtonStyle {
     }
 }
 
-private struct CompactQuotaAccountView: View {
+struct CompactQuotaAccountView: View {
     let provider: QuotaProvider
     let providerName: String
     let account: StatusBarMenuAccountSnapshot
     let showAccountName: Bool
     let displayMode: QuotaDisplayMode
+    var showsResetCountdown: Bool = false
     @State private var isHovered = false
 
     var body: some View {
+        if showsResetCountdown {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                content(now: context.date)
+            }
+        } else {
+            content(now: .now)
+        }
+    }
+
+    private func content(now: Date) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
                 ProviderIconMono(provider: provider, size: 13, tint: provider.color)
@@ -444,7 +457,7 @@ private struct CompactQuotaAccountView: View {
                 Text("Quota API unavailable · previous reading").font(.caption).foregroundStyle(.secondary)
             }
             ForEach(account.quota.models) { metric in
-                quotaRow(metric).help(paceTooltip(metric))
+                quotaRow(metric, now: now).help(paceTooltip(metric))
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
@@ -458,8 +471,11 @@ private struct CompactQuotaAccountView: View {
         provider == .claude || provider == .codex || provider == .opencodeGo ? 48 : 70
     }
 
-    private func quotaRow(_ metric: QuotaMetric) -> some View {
-        HStack(spacing: 8) {
+    private func quotaRow(_ metric: QuotaMetric, now: Date) -> some View {
+        let countdown = showsResetCountdown && !account.quota.isForbidden
+            ? QuotaResetCountdown.value(remainingPercentage: metric.percentage, resetAt: QuotaResetCountdown.resetDate(metric.resetTime), now: now)
+            : nil
+        return HStack(spacing: 8) {
             Text(shortLabel(metric)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 .frame(width: metric.isStandaloneMetric ? nil : meterLabelWidth, alignment: .leading)
             if metric.isStandaloneMetric {
@@ -468,12 +484,13 @@ private struct CompactQuotaAccountView: View {
             } else {
                 PaceGauge(percentage: displayMode.displayValue(from: metric.percentage),
                           tint: provider.color, pace: pace(for: metric), displayMode: displayMode, trackHeight: 3)
-                Text(metric.percentage < 0 ? "—" : "\(Int(displayMode.displayValue(from: metric.percentage).rounded()))%")
+                Text(countdown?.text ?? (metric.percentage < 0 ? "—" : "\(Int(displayMode.displayValue(from: metric.percentage).rounded()))%"))
                     .font(.system(size: 11, weight: .semibold, design: .rounded)).monospacedDigit()
                     .foregroundStyle(provider.color)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(width: 38, alignment: .trailing)
+                    .accessibilityLabel(countdown?.accessibilityText ?? (metric.percentage < 0 ? "No quota data" : "\(Int(displayMode.displayValue(from: metric.percentage).rounded())) percent"))
             }
         }
     }
@@ -890,6 +907,9 @@ private struct MenuAccountCardView: View {
         
         if lowercased.contains("ultra") {
             return ("Ultra", .orange.opacity(0.15), .orange)
+        }
+        if lowercased.hasPrefix("max") {
+            return (planName, .purple.opacity(0.15), .purple)
         }
         if lowercased.contains("pro") {
             return ("Pro", .blue.opacity(0.15), .blue)

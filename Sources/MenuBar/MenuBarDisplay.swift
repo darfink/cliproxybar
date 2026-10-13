@@ -33,10 +33,25 @@ public extension String {
 public struct MenuBarQuotaMetric: Equatable, Sendable {
     public let labelKey: String
     public let remainingPercentage: Double
+    public let resetAt: Date?
 
-    public init(labelKey: String, remainingPercentage: Double) {
+    public init(labelKey: String, remainingPercentage: Double, resetAt: Date? = nil) {
         self.labelKey = labelKey
         self.remainingPercentage = remainingPercentage
+        self.resetAt = resetAt
+    }
+
+    static func lowest(in models: [QuotaMetric], labelKey: String) -> Self? {
+        guard !models.isEmpty else { return nil }
+        guard let percentage = models.map(\.percentage).filter({ $0.isFinite && $0 >= 0 }).min() else {
+            return Self(labelKey: labelKey, remainingPercentage: -1)
+        }
+        let limiting = models.filter { $0.percentage == percentage }
+        let resets = limiting.compactMap { QuotaResetCountdown.resetDate($0.resetTime) }
+        // Tied exhausted limits all have to reset. An unknown reset prevents
+        // giving a misleading account-wide countdown.
+        let resetAt = resets.count == limiting.count ? resets.max() : nil
+        return Self(labelKey: labelKey, remainingPercentage: percentage, resetAt: resetAt)
     }
 }
 
@@ -139,14 +154,10 @@ public struct MenuBarQuotaPair: Equatable, Sendable {
         }
 
         return MenuBarQuotaPair(
-            top: MenuBarQuotaMetric(
-                labelKey: topLabelKey,
-                remainingPercentage: topPercentage ?? -1
-            ),
-            bottom: MenuBarQuotaMetric(
-                labelKey: bottomLabelKey,
-                remainingPercentage: bottomPercentage ?? -1
-            )
+            top: MenuBarQuotaMetric.lowest(in: models.filter { topNames.contains($0.name) }, labelKey: topLabelKey)
+                ?? MenuBarQuotaMetric(labelKey: topLabelKey, remainingPercentage: -1),
+            bottom: MenuBarQuotaMetric.lowest(in: models.filter { bottomNames.contains($0.name) }, labelKey: bottomLabelKey)
+                ?? MenuBarQuotaMetric(labelKey: bottomLabelKey, remainingPercentage: -1)
         )
     }
 
@@ -166,6 +177,8 @@ public struct MenuBarQuotaDisplayItem: Identifiable, Equatable {
     public let provider: QuotaProvider
     public var isForbidden: Bool
     public var quotaPair: MenuBarQuotaPair?
+    public let resetAt: Date?
+    public let showsResetCountdown: Bool
 
     public init(
         id: String,
@@ -174,7 +187,9 @@ public struct MenuBarQuotaDisplayItem: Identifiable, Equatable {
         percentage: Double,
         provider: QuotaProvider,
         isForbidden: Bool = false,
-        quotaPair: MenuBarQuotaPair? = nil
+        quotaPair: MenuBarQuotaPair? = nil,
+        resetAt: Date? = nil,
+        showsResetCountdown: Bool = false
     ) {
         self.id = id
         self.providerSymbol = providerSymbol
@@ -183,6 +198,17 @@ public struct MenuBarQuotaDisplayItem: Identifiable, Equatable {
         self.provider = provider
         self.isForbidden = isForbidden
         self.quotaPair = quotaPair
+        self.resetAt = resetAt
+        self.showsResetCountdown = showsResetCountdown
+    }
+
+    func resetCountdownLabels(now: Date = .now) -> [String] {
+        guard showsResetCountdown, !isForbidden else { return [] }
+        let metrics = quotaPair.map { [$0.top, $0.bottom] }
+            ?? [MenuBarQuotaMetric(labelKey: "", remainingPercentage: percentage, resetAt: resetAt)]
+        return metrics.compactMap {
+            QuotaResetCountdown.value(remainingPercentage: $0.remainingPercentage, resetAt: $0.resetAt, now: now)?.text
+        }
     }
     
     public var statusColor: Color {

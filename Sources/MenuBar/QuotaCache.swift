@@ -64,6 +64,14 @@ struct QuotaCache {
                    !freshQuota.hasDisplayData || priorQuota.lastUpdated > freshQuota.lastUpdated {
                     account.fetchedQuota = priorQuota
                 }
+                // Newer passive observations do not carry Claude's plan.
+                // Retain that metadata without replacing the newer quotas.
+                if account.provider == "claude", let plan = PluginQuotaParser.text(priorQuota.planType),
+                   PluginQuotaParser.text(account.providerQuota().planType) == nil {
+                    var quota = account.providerQuota()
+                    quota.planType = plan
+                    account.fetchedQuota = quota
+                }
                 account.quotaIssue = prior.quotaIssue
                 account.quotaState = prior.quotaState
                 account.providerDisplayName = prior.providerDisplayName

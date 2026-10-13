@@ -1,9 +1,124 @@
 import AppKit
 import SwiftUI
 import XCTest
+import CLIProxyBarCore
 @testable import MenuBar
 
 final class UsageMenuInteractionTests: XCTestCase {
+    @MainActor
+    func testHistoryTabChoiceSurvivesReopeningAndTokenOnlyFallback() throws {
+        let suite = "AccountHistoryTabTests." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let history = QuotaHistorySnapshot(series: [QuotaHistorySeries(id: "session", title: "5 hours", points: [])])
+        func account(_ quota: QuotaHistorySnapshot?) -> AccountDetailView {
+            AccountDetailView(usage: ProxyUsageSnapshot(), quotaHistory: quota, provider: .claude, defaults: defaults)
+        }
+        XCTAssertEqual(account(history).selectedTab, .tokens)
+        XCTAssertNil(defaults.object(forKey: AccountHistoryTab.preferenceKey))
+        defaults.set(AccountHistoryTab.tokens.rawValue, forKey: AccountHistoryTab.preferenceKey)
+        XCTAssertEqual(account(history).selectedTab, .tokens)
+        defaults.set(AccountHistoryTab.quota.rawValue, forKey: AccountHistoryTab.preferenceKey)
+        XCTAssertEqual(account(nil).selectedTab, .tokens)
+        XCTAssertEqual(account(QuotaHistorySnapshot()).selectedTab, .tokens)
+        XCTAssertEqual(defaults.string(forKey: AccountHistoryTab.preferenceKey), AccountHistoryTab.quota.rawValue)
+        XCTAssertEqual(account(history).selectedTab, .quota)
+        defaults.removeObject(forKey: AccountHistoryTab.preferenceKey)
+        var paused = history
+        paused.recordingEnabled = false
+        XCTAssertEqual(account(paused).selectedTab, .tokens)
+    }
+
+    @MainActor
+    func testSwitchingHistoryTabsKeepsMountedCardStableAndFitsBothPanels() throws {
+        let suite = "AccountHistorySizingTests." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(AccountHistoryTab.quota.rawValue, forKey: AccountHistoryTab.preferenceKey)
+        let now = Date()
+        var day = ProxyUsageDay(date: now, requests: 20)
+        day.tokens.total = 100_000
+        day.tokens.cacheWrite = 12_000
+        for name in ["Model A", "Model B", "Model C", "Model D"] {
+            day.models[name] = ProxyUsageModelTotals(requests: 5, tokens: day.tokens)
+        }
+        let usage = ProxyUsageSnapshot(days: [day], startedAt: now, trackingEnabled: true, lastCollectedAt: now)
+        let history = QuotaHistorySnapshot(series: [
+            QuotaHistorySeries(id: "session", title: "5 hours", points: [QuotaHistoryPoint(date: now, usedPercent: 20)]),
+            QuotaHistorySeries(id: "weekly", title: "Weekly", points: [QuotaHistoryPoint(date: now, usedPercent: 40)])
+        ])
+        let anchor = NSMenuItem()
+        let submenu = UsageSubmenu(usage: usage, provider: .claude, accountName: "Fixture", anchor: anchor,
+            appearance: nil, locale: .current, quotaHistory: history, defaults: defaults)
+        anchor.submenu = submenu
+        let item = try XCTUnwrap(submenu.items.first)
+        let hosting = try XCTUnwrap(item.view)
+        _ = NSApplication.shared
+        // Attaching a hosting view can trigger layout that offscreen size
+        // measurements miss. This window stays hidden throughout the test.
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: hosting.frame.size),
+            styleMask: .borderless, backing: .buffered, defer: false)
+        window.contentView?.addSubview(hosting)
+        defer { hosting.removeFromSuperview(); window.orderOut(nil) }
+        func settleLayout(mode: RunLoop.Mode = .default, duration: TimeInterval = 0.1) {
+            let deadline = Date().addingTimeInterval(duration)
+            while Date() < deadline {
+                hosting.layoutSubtreeIfNeeded()
+                RunLoop.main.run(mode: mode, before: Date().addingTimeInterval(0.01))
+            }
+        }
+        func export(_ tab: String) throws {
+            guard let path = ProcessInfo.processInfo.environment["CLIPROXYBAR_HISTORY_CARD_PREVIEW"] else { return }
+            for (suffix, scheme) in [("light", ColorScheme.light), ("dark", .dark)] {
+                let preview = NSHostingView(rootView: AccountDetailView(usage: usage, quotaHistory: history,
+                    provider: .claude, defaults: defaults).frame(width: 520).fixedSize(horizontal: false, vertical: true)
+                    .background(Color(nsColor: .windowBackgroundColor)).environment(\.colorScheme, scheme))
+                preview.appearance = NSAppearance(named: scheme == .light ? .aqua : .darkAqua)
+                preview.setFrameSize(preview.intrinsicContentSize)
+                preview.layoutSubtreeIfNeeded()
+                let bitmap = try XCTUnwrap(preview.bitmapImageRepForCachingDisplay(in: preview.bounds))
+                preview.cacheDisplay(in: preview.bounds, to: bitmap)
+                try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+                    .write(to: URL(fileURLWithPath: path + "-" + tab + "-" + suffix + ".png"))
+            }
+        }
+        settleLayout()
+        let frame = hosting.frame
+        let menuSize = submenu.size
+        XCTAssertEqual(frame.height, hosting.intrinsicContentSize.height, accuracy: 1)
+        let fullTokens = NSHostingView(rootView: ProxyUsageDetailView(usage: usage, provider: .claude).frame(width: 520))
+        XCTAssertGreaterThan(frame.height, fullTokens.intrinsicContentSize.height)
+        hosting.postsFrameChangedNotifications = true
+        var changedFrames: [NSRect] = []
+        let recordFrame: @MainActor @Sendable () -> Void = { changedFrames.append(hosting.frame) }
+        let observer = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification,
+            object: hosting, queue: .main) { _ in MainActor.assumeIsolated { recordFrame() } }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        try export("quota")
+        submenu.selectHistoryTab(.tokens)
+        XCTAssertTrue(hosting === item.view, "The header and panels must not be replaced when switching tabs")
+        XCTAssertEqual(submenu.selectedHistoryTab, .tokens)
+        XCTAssertEqual(defaults.string(forKey: AccountHistoryTab.preferenceKey), AccountHistoryTab.tokens.rawValue)
+        settleLayout(duration: 0.75)
+        XCTAssertEqual(hosting.frame, frame)
+        XCTAssertEqual(submenu.size, menuSize)
+        XCTAssertEqual(hosting.intrinsicContentSize.height, frame.height, accuracy: 1)
+        try export("tokens")
+        submenu.selectHistoryTab(.quota)
+        XCTAssertTrue(hosting === item.view)
+        settleLayout(mode: .eventTracking, duration: 0.75)
+        XCTAssertEqual(hosting.frame, frame)
+        XCTAssertEqual(submenu.size, menuSize)
+        XCTAssertEqual(hosting.intrinsicContentSize.height, frame.height, accuracy: 1)
+        XCTAssertTrue(changedFrames.isEmpty, "No immediate or delayed frame correction may run after a tab switch")
+        XCTAssertTrue(item === submenu.items.first)
+        defaults.set(AccountHistoryTab.tokens.rawValue, forKey: AccountHistoryTab.preferenceKey)
+        submenu.menuWillOpen(submenu)
+        XCTAssertEqual(submenu.selectedHistoryTab, .tokens)
+        XCTAssertTrue(hosting === item.view)
+        XCTAssertEqual(hosting.frame, frame)
+    }
+
     @MainActor
     func testUsageSubmenuForwardsRefreshWithoutSelectingAMenuAction() async throws {
         let refreshed = expectation(description: "Refresh from Usage submenu")

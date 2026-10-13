@@ -28,6 +28,7 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
         let configuration: Configuration
         let usesDarkColorScheme: Bool
         let backingScaleFactor: CGFloat
+        let resetCountdownLabels: [String]
     }
     
     private var statusItem: NSStatusItem?
@@ -39,6 +40,7 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
     private var configuration: Configuration?
     private var lastRenderSignature: RenderSignature?
     private var appearanceObservation: NSKeyValueObservation?
+    @ObservationIgnored private var resetCountdownTimer: Timer?
     
     private var menuSnapshotProvider: (@MainActor () -> StatusBarMenuSnapshot)?
     private var commandDispatcher: StatusBarCommandDispatcher?
@@ -92,6 +94,24 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
         menuContentVersion += 1
 
         renderStatusBar()
+        updateCountdownTimer()
+    }
+
+    private func updateCountdownTimer() {
+        let active = configuration?.items.contains { !$0.resetCountdownLabels().isEmpty } == true
+        if active, resetCountdownTimer == nil {
+            let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.renderStatusBar()
+                    self?.updateCountdownTimer()
+                }
+            }
+            resetCountdownTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
+        } else if !active {
+            resetCountdownTimer?.invalidate()
+            resetCountdownTimer = nil
+        }
     }
 
     private func renderStatusBar() {
@@ -118,10 +138,12 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
         let usesDarkColorScheme = button.isHighlighted
             || button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let scale = targetBackingScaleFactor
+        let now = Date()
         let signature = RenderSignature(
             configuration: configuration,
             usesDarkColorScheme: usesDarkColorScheme,
-            backingScaleFactor: scale
+            backingScaleFactor: scale,
+            resetCountdownLabels: configuration.items.flatMap { $0.resetCountdownLabels(now: now) }
         )
         guard signature != lastRenderSignature else { return }
         
@@ -149,7 +171,8 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
             StatusBarQuotaView(
                 items: configuration.items,
                 colorMode: configuration.colorMode,
-                quotaDisplayMode: configuration.quotaDisplayMode
+                quotaDisplayMode: configuration.quotaDisplayMode,
+                now: now
             )
         }
         .environment(\.colorScheme, colorScheme)
@@ -169,7 +192,8 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
             
             let description = accessibilityDescription(
                 for: configuration.items,
-                displayMode: configuration.quotaDisplayMode
+                displayMode: configuration.quotaDisplayMode,
+                now: now
             )
             image.accessibilityDescription = description
             button.setAccessibilityLabel(description)
@@ -191,16 +215,20 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
         }
     }
     
-    private func accessibilityDescription(for items: [MenuBarQuotaDisplayItem], displayMode: QuotaDisplayMode) -> String {
+    private func accessibilityDescription(for items: [MenuBarQuotaDisplayItem], displayMode: QuotaDisplayMode, now: Date) -> String {
         let itemDescriptions = items.map { item -> String in
             let providerName = item.provider.displayName
             if item.isForbidden {
                 return "\(providerName): Account disabled"
             }
             if let pair = item.quotaPair {
-                let topDesc = "\(pair.top.labelKey.localized()): \(StatusBarQuotaItemView.accessibilityValue(for: pair.top, displayMode: displayMode))"
-                let bottomDesc = "\(pair.bottom.labelKey.localized()): \(StatusBarQuotaItemView.accessibilityValue(for: pair.bottom, displayMode: displayMode))"
+                let topDesc = "\(pair.top.labelKey.localized()): \(StatusBarQuotaItemView.accessibilityValue(for: pair.top, displayMode: displayMode, showsResetCountdown: item.showsResetCountdown, now: now))"
+                let bottomDesc = "\(pair.bottom.labelKey.localized()): \(StatusBarQuotaItemView.accessibilityValue(for: pair.bottom, displayMode: displayMode, showsResetCountdown: item.showsResetCountdown, now: now))"
                 return "\(providerName): \(topDesc), \(bottomDesc)"
+            }
+            if item.showsResetCountdown, let countdown = QuotaResetCountdown.value(remainingPercentage: item.percentage,
+                resetAt: item.resetAt, now: now) {
+                return "\(providerName): \(countdown.accessibilityText)"
             }
             if item.percentage >= 0 {
                 let displayedValue = displayMode.displayValue(from: item.percentage)
@@ -337,6 +365,8 @@ public final class StatusBarManager: NSObject, NSMenuDelegate {
     }
     
     func removeStatusItem() {
+        resetCountdownTimer?.invalidate()
+        resetCountdownTimer = nil
         appearanceObservation = nil
         if let item = statusItem {
             NSStatusBar.system.removeStatusItem(item)
@@ -366,6 +396,7 @@ struct StatusBarQuotaView: View {
     let items: [MenuBarQuotaDisplayItem]
     let colorMode: MenuBarColorMode
     let quotaDisplayMode: QuotaDisplayMode
+    var now: Date = .now
     
     var body: some View {
         HStack(spacing: 8) {
@@ -373,7 +404,8 @@ struct StatusBarQuotaView: View {
                 StatusBarQuotaItemView(
                     item: item,
                     colorMode: colorMode,
-                    quotaDisplayMode: quotaDisplayMode
+                    quotaDisplayMode: quotaDisplayMode,
+                    now: now
                 )
             }
         }
@@ -389,6 +421,7 @@ struct StatusBarQuotaItemView: View {
     let item: MenuBarQuotaDisplayItem
     let colorMode: MenuBarColorMode
     var quotaDisplayMode: QuotaDisplayMode = .used
+    var now: Date = .now
     
     var body: some View {
         let displayPercent = quotaDisplayMode.displayValue(from: item.percentage)
@@ -412,12 +445,13 @@ struct StatusBarQuotaItemView: View {
                     .foregroundStyle(.secondary)
             } else if let quotaPair = item.quotaPair {
                 VStack(alignment: .trailing, spacing: 0) {
-                    compactQuotaText(quotaPair.top.remainingPercentage)
-                    compactQuotaText(quotaPair.bottom.remainingPercentage)
+                    compactQuotaText(quotaPair.top)
+                    compactQuotaText(quotaPair.bottom)
                 }
                 .frame(height: 18)
             } else if item.percentage >= 0 {
-                Text(formatPercentage(displayPercent))
+                Text(countdown(for: MenuBarQuotaMetric(labelKey: "", remainingPercentage: item.percentage, resetAt: item.resetAt))
+                    ?? formatPercentage(displayPercent))
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(colorMode == .colored ? item.statusColor : .primary)
                     .fixedSize()
@@ -433,7 +467,13 @@ struct StatusBarQuotaItemView: View {
         return String(format: "%.0f%%", clamped.rounded())
     }
 
-    private func compactQuotaText(_ remainingValue: Double) -> some View {
+    private func countdown(for metric: MenuBarQuotaMetric) -> String? {
+        guard item.showsResetCountdown else { return nil }
+        return QuotaResetCountdown.value(remainingPercentage: metric.remainingPercentage, resetAt: metric.resetAt, now: now)?.text
+    }
+
+    private func compactQuotaText(_ metric: MenuBarQuotaMetric) -> some View {
+        let remainingValue = metric.remainingPercentage
         let displayedValue = remainingValue < 0
             ? -1
             : quotaDisplayMode.displayValue(from: remainingValue)
@@ -441,13 +481,16 @@ struct StatusBarQuotaItemView: View {
             ? .secondary
             : item.statusColor(for: remainingValue)
 
-        return Text(formatPercentage(displayedValue))
+        return Text(countdown(for: metric) ?? formatPercentage(displayedValue))
             .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
             .foregroundStyle(colorMode == .colored ? quotaColor : .primary)
             .fixedSize()
     }
 
-    static func accessibilityValue(for metric: MenuBarQuotaMetric, displayMode: QuotaDisplayMode) -> String {
+    static func accessibilityValue(for metric: MenuBarQuotaMetric, displayMode: QuotaDisplayMode,
+                                   showsResetCountdown: Bool = false, now: Date = .now) -> String {
+        if showsResetCountdown, let countdown = QuotaResetCountdown.value(remainingPercentage: metric.remainingPercentage,
+            resetAt: metric.resetAt, now: now) { return countdown.accessibilityText }
         guard metric.remainingPercentage >= 0 else {
             return "quota.noDataYet".localized()
         }
