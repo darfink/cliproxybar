@@ -37,19 +37,7 @@ struct ReadmePreview {
         let usage = ProxyUsageSnapshot(days: days, startedAt: start, trackingEnabled: true,
             lastCollectedAt: now.addingTimeInterval(-18), successCount: days.reduce(0) { $0 + $1.requests }, failedCount: 0)
 
-        let indices = (0...288).filter { !(110...126).contains($0) }
-        let historyStart = now.addingTimeInterval(-86400)
-        let session = indices.map { index in
-            let factor = [1.2, 0.9, 1.0, 1.5, 0.875][min(4, index / 60)]
-            return QuotaHistoryPoint(date: historyStart.addingTimeInterval(Double(index * 300)), usedPercent: Double(index % 60) * factor)
-        }
-        let weekly = indices.map { index in
-            QuotaHistoryPoint(date: historyStart.addingTimeInterval(Double(index * 300)), usedPercent: 22 + Double(index) / 288 * 14)
-        }
-        let history = QuotaHistorySnapshot(series: [
-            QuotaHistorySeries(id: "five-hour-session", title: "Session", points: session),
-            QuotaHistorySeries(id: "seven-day-weekly", title: "Weekly", points: weekly)
-        ])
+        let history = quotaHistory(endingAt: now)
         let observed = now.addingTimeInterval(-180)
         func metric(_ name: String, remaining: Double, reset: TimeInterval? = nil, duration: TimeInterval? = nil) -> QuotaMetric {
             QuotaMetric(name: name, percentage: remaining,
@@ -141,6 +129,39 @@ struct ReadmePreview {
         print("Rendered eight previews with fictional accounts and activity.")
     }
 
+    private static func quotaHistory(endingAt now: Date) -> QuotaHistorySnapshot {
+        // Fictional work periods increase at different rates, with quiet time
+        // between them. Only session resets produce abrupt drops.
+        let sessions: [(start: Double, work: [(start: Double, duration: Double, amount: Double)])] = [
+            (-1.5, [(-1.4, 1.5, 10), (0.4, 1.2, 21), (2.0, 1.0, 16)]),
+            (4.25, [(4.4, 0.6, 6), (5.5, 1.8, 24), (7.8, 0.7, 11)]),
+            (20.5, [(20.5, 1.0, 8), (21.8, 1.4, 27), (23.3, 0.7, 7)])
+        ]
+        func consumption(_ work: [(start: Double, duration: Double, amount: Double)], at hour: Double) -> Double {
+            work.reduce(0) { used, period in
+                let progress = min(1, max(0, (hour - period.start) / period.duration))
+                return used + period.amount * progress * progress * (3 - 2 * progress)
+            }
+        }
+        let work = sessions.flatMap(\.work)
+        let baseline = consumption(work, at: 0)
+        let total = consumption(work, at: 24) - baseline
+        let start = now.addingTimeInterval(-86400)
+        var session: [QuotaHistoryPoint] = []
+        var weekly: [QuotaHistoryPoint] = []
+        for index in 0...288 {
+            let hour = Double(index) / 12
+            let date = start.addingTimeInterval(Double(index * 300))
+            let active = sessions.first { hour >= $0.start && hour < $0.start + 5 }
+            session.append(QuotaHistoryPoint(date: date, usedPercent: active.map { consumption($0.work, at: hour) } ?? 0))
+            weekly.append(QuotaHistoryPoint(date: date, usedPercent: 22 + 14 * (consumption(work, at: hour) - baseline) / total))
+        }
+        // End at the same 42% session and 36% weekly usage as the sample account.
+        return QuotaHistorySnapshot(series: [
+            QuotaHistorySeries(id: "five-hour-session", title: "Session", points: session),
+            QuotaHistorySeries(id: "seven-day-weekly", title: "Weekly", points: weekly)
+        ])
+    }
 
     @MainActor private static func capture(_ view: NSView, appearance: NSAppearance?) throws -> CGImage {
         view.appearance = appearance

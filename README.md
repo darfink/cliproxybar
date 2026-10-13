@@ -33,19 +33,26 @@ Account hover cards add token totals and quota history graphs, with a remembered
   </tr>
 </table>
 
-**Token history**
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/usage-dark.png">
-  <img src="docs/screenshots/usage.png" width="520" alt="Token history tab with daily totals, token counters, activity levels, and model totals">
-</picture>
-
-**Quota history**
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/quota-history-dark.png">
-  <img src="docs/screenshots/quota-history.png" width="520" alt="Quota history tab with session and weekly usage on a shared percentage graph and a compact color legend">
-</picture>
+<table>
+  <tr>
+    <th>Token history</th>
+    <th>Quota history</th>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/usage-dark.png">
+        <img src="docs/screenshots/usage.png" width="420" alt="Token history with daily totals, token counters, activity levels, and model totals">
+      </picture>
+    </td>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/quota-history-dark.png">
+        <img src="docs/screenshots/quota-history.png" width="420" alt="Quota history with gradual session and weekly usage, pauses, and sharp session resets">
+      </picture>
+    </td>
+  </tr>
+</table>
 
 Images show the current interface with fictional accounts, sample usage, and the optional reset countdown.
 Light and dark images follow your color preference.
