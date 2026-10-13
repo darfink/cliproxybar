@@ -256,9 +256,11 @@ final class QuotaHistoryTests: XCTestCase {
             XCTAssertLessThan(view.frame.height, 600)
         }
         let chart = QuotaHistoryDetailView(history: history, provider: .claude, now: observed, interactive: false).frame(width: 520)
-        let image = try XCTUnwrap(ImageRenderer(content: chart).cgImage)
-        XCTAssertEqual(image.width, 520)
-        XCTAssertLessThan(image.height, 420)
+        // Virtual Intel runners lack a working Metal chart renderer. Geometry
+        // checks do not need a GPU; actual image exports remain opt-in below.
+        let layout = NSHostingView(rootView: chart).intrinsicContentSize
+        XCTAssertEqual(layout.width, 520)
+        XCTAssertLessThan(layout.height, 420)
         if let path = ProcessInfo.processInfo.environment["CLIPROXYBAR_QUOTA_HISTORY_PREVIEW"] {
             for (suffix, scheme) in [("light", ColorScheme.light), ("dark", ColorScheme.dark)] {
                 // Match the native menu's appearance in offscreen fixtures.
