@@ -54,12 +54,17 @@ final class UsageMenuInteractionTests: XCTestCase {
         let item = try XCTUnwrap(submenu.items.first)
         let hosting = try XCTUnwrap(item.view)
         _ = NSApplication.shared
-        // Attaching a hosting view can trigger layout that offscreen size
-        // measurements miss. This window stays hidden throughout the test.
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: hosting.frame.size),
-            styleMask: .borderless, backing: .buffered, defer: false)
-        window.contentView?.addSubview(hosting)
-        defer { hosting.removeFromSuperview(); window.orderOut(nil) }
+        // A hidden window exercises mounted layout on desktops and Apple
+        // Silicon CI. Intel CI's virtual GPU cannot render the chart, so it
+        // keeps the same geometry checks on an unattached hosting view.
+        var attachWindow = ProcessInfo.processInfo.environment["CLIPROXYBAR_OFFSCREEN_LAYOUT_TEST"] != "1"
+        #if arch(x86_64)
+        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" { attachWindow = false }
+        #endif
+        let window = attachWindow ? NSWindow(contentRect: NSRect(origin: .zero, size: hosting.frame.size),
+            styleMask: .borderless, backing: .buffered, defer: false) : nil
+        window?.contentView?.addSubview(hosting)
+        defer { hosting.removeFromSuperview(); window?.orderOut(nil) }
         func settleLayout(mode: RunLoop.Mode = .default, duration: TimeInterval = 0.1) {
             let deadline = Date().addingTimeInterval(duration)
             while Date() < deadline {
