@@ -34,6 +34,26 @@ enum QuotaResetKind: String, Codable, Sendable {
             return name.hasSuffix("-session") ? "Session" : "Weekly"
         }
     }
+
+    static func parentMetrics(of name: String) -> [String] {
+        switch name {
+        case "five-hour-session", "seven-day-sonnet", "seven-day-opus":
+            return ["seven-day-weekly"]
+        case "codex-session":
+            return ["codex-weekly"]
+        case "opencode-go-rolling":
+            return ["opencode-go-weekly", "opencode-go-monthly"]
+        case "opencode-go-weekly":
+            return ["opencode-go-monthly"]
+        default:
+            if name.hasPrefix("antigravity-"), name.hasSuffix("-session") {
+                return [String(name.dropLast("-session".count)) + "-weekly"]
+            }
+            // Different model groups and generic plugin labels do not establish
+            // a shared allowance. Do not infer parents from duration alone.
+            return []
+        }
+    }
 }
 
 struct QuotaResetEvent: Equatable, Sendable {
@@ -97,6 +117,9 @@ struct QuotaResetMonitor {
               observedAt <= now.addingTimeInterval(60), observedAt >= now.addingTimeInterval(-600) else { return [] }
         let accountID = ProxyUsageHistory.digest(endpointHash + "\n" + account.provider + "\n" + account.name)
         let plan = quota.planType?.lowercased()
+        // Use the whole fresh response so simultaneous parent resets are handled
+        // consistently, regardless of the order of its quota windows.
+        let exhausted = Set(quota.models.filter { $0.percentage == 0 }.map(\.name))
         var events: [QuotaResetEvent] = []
         for metric in quota.models {
             guard let kind = QuotaResetKind.classify(metric.name), metric.percentage.isFinite,
@@ -132,7 +155,10 @@ struct QuotaResetMonitor {
                     handled = confirmed
                     // Match the menu's whole-percent usage display. A reset of
                     // an already unused window needs neither a banner nor confetti.
-                    if isRolling || (100 - endingRemaining).rounded() > 0 {
+                    let blockedByParent = QuotaResetKind.parentMetrics(of: metric.name).contains { exhausted.contains($0) }
+                    // Still mark a suppressed reset handled, so a later parent
+                    // recovery cannot announce this old reset after relaunch.
+                    if !blockedByParent && (isRolling || (100 - endingRemaining).rounded() > 0) {
                         events.append(QuotaResetEvent(accountID: accountID, provider: account.provider,
                             accountName: account.displayName, metric: metric.name, kind: kind, resetAt: confirmed))
                     }

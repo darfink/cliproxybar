@@ -12,9 +12,11 @@ final class QuotaResetTests: XCTestCase {
             disabled: nil, unavailable: nil, quota: nil, model_quotas: nil)
     }
     private func quota(_ name: String = "five-hour-session", remaining: Double = 50,
-                       at date: Date, reset: Date? = nil, plan: String? = nil) -> ProviderQuota {
+                       at date: Date, reset: Date? = nil, plan: String? = nil,
+                       otherMetrics: [QuotaMetric] = []) -> ProviderQuota {
         ProviderQuota(models: [QuotaMetric(name: name, percentage: remaining,
-            resetTime: reset.map { ISO8601DateFormatter().string(from: $0) } ?? "")], lastUpdated: date, planType: plan)
+            resetTime: reset.map { ISO8601DateFormatter().string(from: $0) } ?? "")] + otherMetrics,
+            lastUpdated: date, planType: plan)
     }
     private func read(_ monitor: inout QuotaResetMonitor, _ quota: ProviderQuota, provider: String = "claude") -> [QuotaResetEvent] {
         monitor.observe(account: account(provider), quota: quota, now: quota.lastUpdated)
@@ -101,6 +103,115 @@ final class QuotaResetTests: XCTestCase {
         XCTAssertTrue(read(&reopened, quota(remaining: 70, at: start.addingTimeInterval(120), reset: nextWindow)).isEmpty)
         XCTAssertEqual(read(&reopened, quota(remaining: 100, at: nextWindow.addingTimeInterval(90),
             reset: nextWindow.addingTimeInterval(18000))).count, 1)
+    }
+
+    func testExhaustedParentsSuppressTheirChildResetEvents() {
+        for (provider, child, parent) in [
+            ("claude", "five-hour-session", "seven-day-weekly"),
+            ("claude", "seven-day-sonnet", "seven-day-weekly"),
+            ("claude", "seven-day-opus", "seven-day-weekly"),
+            ("codex", "codex-session", "codex-weekly"),
+            ("opencode-go", "opencode-go-rolling", "opencode-go-weekly"),
+            ("opencode-go", "opencode-go-rolling", "opencode-go-monthly"),
+            ("opencode-go", "opencode-go-weekly", "opencode-go-monthly"),
+            ("antigravity", "antigravity-claude-gpt-session", "antigravity-claude-gpt-weekly"),
+            ("antigravity", "antigravity-gemini-session", "antigravity-gemini-weekly")
+        ] {
+            // A nearly exhausted parent can still allow requests, even if the
+            // menu rounds its usage to 100%. Only actual depletion blocks alerts.
+            for remaining in [0.0, 0.01, 40.0] {
+                var monitor = QuotaResetMonitor(endpoint: endpoint)
+                let parents = [QuotaMetric(name: parent, percentage: remaining, resetTime: "")]
+                _ = read(&monitor, quota(child, at: start, reset: start.addingTimeInterval(60),
+                    otherMetrics: parents), provider: provider)
+                let events = read(&monitor, quota(child, remaining: 100, at: start.addingTimeInterval(90),
+                    reset: start.addingTimeInterval(604800), otherMetrics: parents), provider: provider)
+                XCTAssertEqual(events.map(\.metric), remaining == 0 ? [] : [child],
+                    "\(provider) \(child), \(parent) has \(remaining)% remaining")
+            }
+        }
+    }
+
+    func testSimultaneousParentResetsAllowEventsInEitherMetricOrder() {
+        for (provider, names) in [
+            ("claude", ["five-hour-session", "seven-day-weekly"]),
+            ("codex", ["codex-session", "codex-weekly"]),
+            ("opencode-go", ["opencode-go-rolling", "opencode-go-weekly", "opencode-go-monthly"])
+        ] {
+            for orderedNames in [names, Array(names.reversed())] {
+                var monitor = QuotaResetMonitor(endpoint: endpoint)
+                let before = orderedNames.map { QuotaMetric(name: $0, percentage: 0,
+                    resetTime: ISO8601DateFormatter().string(from: start.addingTimeInterval(60))) }
+                _ = read(&monitor, ProviderQuota(models: before, lastUpdated: start), provider: provider)
+                let after = orderedNames.map { QuotaMetric(name: $0, percentage: 100,
+                    resetTime: ISO8601DateFormatter().string(from: start.addingTimeInterval(2592000))) }
+                let events = read(&monitor, ProviderQuota(models: after,
+                    lastUpdated: start.addingTimeInterval(90)), provider: provider)
+                XCTAssertEqual(Set(events.map(\.metric)), Set(names))
+            }
+        }
+    }
+
+    func testUnrelatedGroupsAndShorterWindowsDoNotSuppressResets() {
+        for (provider, child, unrelated) in [
+            ("claude", "five-hour-session", "seven-day-sonnet"),
+            ("claude", "seven-day-opus", "seven-day-sonnet"),
+            ("claude", "seven-day-weekly", "five-hour-session"),
+            ("codex", "codex-weekly", "codex-session"),
+            ("opencode-go", "opencode-go-weekly", "opencode-go-rolling"),
+            ("opencode-go", "opencode-go-monthly", "opencode-go-weekly"),
+            ("antigravity", "antigravity-claude-gpt-session", "antigravity-gemini-weekly"),
+            ("antigravity", "antigravity-gemini-session", "antigravity-claude-gpt-weekly")
+        ] {
+            var monitor = QuotaResetMonitor(endpoint: endpoint)
+            let otherMetrics = [QuotaMetric(name: unrelated, percentage: 0, resetTime: "")]
+            _ = read(&monitor, quota(child, at: start, reset: start.addingTimeInterval(60),
+                otherMetrics: otherMetrics), provider: provider)
+            let events = read(&monitor, quota(child, remaining: 100, at: start.addingTimeInterval(90),
+                reset: start.addingTimeInterval(2592000), otherMetrics: otherMetrics), provider: provider)
+            XCTAssertEqual(events.map(\.metric), [child], "\(unrelated) must not block \(child)")
+        }
+    }
+
+    func testMissingAndInvalidParentsDoNotBecomeExhaustedQuotas() {
+        for remaining in [nil, -1, 101, .nan, .infinity] as [Double?] {
+            var monitor = QuotaResetMonitor(endpoint: endpoint)
+            let parents = remaining.map { [QuotaMetric(name: "seven-day-weekly", percentage: $0, resetTime: "")] } ?? []
+            _ = read(&monitor, quota(at: start, reset: start.addingTimeInterval(60), otherMetrics: parents))
+            let events = read(&monitor, quota(remaining: 100, at: start.addingTimeInterval(90),
+                reset: start.addingTimeInterval(18000), otherMetrics: parents))
+            XCTAssertEqual(events.map(\.metric), ["five-hour-session"])
+        }
+    }
+
+    func testExhaustedParentInAnotherAccountDoesNotBlockReset() {
+        var monitor = QuotaResetMonitor(endpoint: endpoint)
+        _ = read(&monitor, quota(at: start, reset: start.addingTimeInterval(60)))
+        let other = ProxyAccount(name: "other-account.json", provider: "claude", email: "other@example.test",
+            disabled: nil, unavailable: nil, quota: nil, model_quotas: nil)
+        _ = monitor.observe(account: other, quota: quota("seven-day-weekly", remaining: 0, at: start), now: start)
+        XCTAssertEqual(read(&monitor, quota(remaining: 100, at: start.addingTimeInterval(90),
+            reset: start.addingTimeInterval(18000))).map(\.metric), ["five-hour-session"])
+    }
+
+    func testSuppressedResetStaysSilentAfterParentRecoveryAndRelaunch() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var monitor = QuotaResetMonitor(endpoint: endpoint, directory: directory)
+        let exhaustedParent = [QuotaMetric(name: "seven-day-weekly", percentage: 0, resetTime: "")]
+        let nextWindow = start.addingTimeInterval(18000)
+        _ = read(&monitor, quota(at: start, reset: start.addingTimeInterval(60), otherMetrics: exhaustedParent))
+        XCTAssertTrue(read(&monitor, quota(remaining: 100, at: start.addingTimeInterval(90),
+            reset: nextWindow, otherMetrics: exhaustedParent)).isEmpty)
+        try monitor.save()
+
+        var reopened = QuotaResetMonitor(endpoint: endpoint, directory: directory)
+        try reopened.load()
+        let recoveredParent = [QuotaMetric(name: "seven-day-weekly", percentage: 30, resetTime: "")]
+        XCTAssertTrue(read(&reopened, quota(remaining: 80, at: start.addingTimeInterval(120),
+            reset: nextWindow, otherMetrics: recoveredParent)).isEmpty)
+        XCTAssertEqual(read(&reopened, quota(remaining: 100, at: nextWindow.addingTimeInterval(90),
+            reset: nextWindow.addingTimeInterval(18000), otherMetrics: recoveredParent)).map(\.metric), ["five-hour-session"])
     }
 
     func testResetStateFromEarlierVersionsStillLoads() throws {

@@ -67,6 +67,11 @@ Fresh provider readings verify scheduled resets. Rolling alerts wait until the a
 Failed requests and expired countdowns alone do not trigger alerts. Windows that already show 0% usage do not trigger a notification or confetti at reset.
 Saved reset history prevents duplicate alerts after relaunch. Limits that reset together produce one notification per account and one confetti animation.
 
+If a parent quota remains exhausted, the app suppresses reset notifications and confetti for its child windows.
+For example, an exhausted weekly quota suppresses a session alert. An exhausted OpenCode Go monthly quota suppresses rolling and weekly alerts.
+The app uses fresh readings, including parents that reset in the same response.
+Suppressed resets stay silent after parent recovery or an app restart. Separate accounts and unrelated model groups remain independent.
+
 The app must be running and connected. It refreshes at known reset times and checks again during regular polling. After sleep, it can verify session resets from the last 15 minutes and weekly or monthly resets from the last 24 hours. Rolling recovery requires readings no more than 15 minutes apart. Timed alerts require a reset time from the provider.
 
 ## Quota history
