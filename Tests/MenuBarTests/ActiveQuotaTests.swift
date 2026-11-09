@@ -11,6 +11,14 @@ final class ActiveQuotaTests: XCTestCase {
         XCTAssertEqual(quota.lastUpdated, now)
         XCTAssertEqual(quota.models[0].resetTime, "2026-09-28T19:29:59Z")
     }
+    func testClaudeScopedWeeklyLimitsAddModelMetrics() throws {
+        let data = Data(#"{"five_hour":{"utilization":4},"seven_day":{"utilization":18},"seven_day_opus":{"utilization":10},"limits":[{"kind":"weekly_all","percent":18},{"kind":"weekly_scoped","percent":30,"resets_at":"2026-11-10T22:00:00+00:00","scope":{"model":{"id":null,"display_name":"Fable"}}},{"kind":"weekly_scoped","percent":50,"scope":{"model":{"display_name":"Opus"}}},{"kind":"weekly_scoped","percent":5,"scope":{"surface":"chat"}}]}"#.utf8)
+        let quota = try ActiveQuotaParser.parse(data, provider: "claude")
+        XCTAssertEqual(quota.models.map(\.name), ["five-hour-session", "seven-day-weekly", "seven-day-opus", "seven-day-fable"])
+        XCTAssertEqual(quota.models.map(\.percentage), [96, 82, 90, 70])
+        XCTAssertEqual(quota.models[3].resetTime, "2026-11-10T22:00:00+00:00")
+        XCTAssertEqual(quota.models[3].windowDuration, 604800)
+    }
     func testUnusedClaudeAccountStillHasFullQuota() throws {
         let quota = try ActiveQuotaParser.parse(Data(#"{"five_hour":{"utilization":0},"seven_day":{"utilization":0}}"#.utf8), provider: "claude")
         XCTAssertEqual(quota.models.map(\.percentage), [100, 100])

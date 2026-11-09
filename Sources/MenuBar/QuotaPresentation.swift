@@ -192,6 +192,7 @@ public extension QuotaMetric {
         case "seven-day-weekly", "weekly-usage": "Weekly"
         case "seven-day-sonnet", "sonnet-only": "Sonnet"
         case "seven-day-opus": "Opus"
+        case "seven-day-fable": "Fable"
         case "extra-usage": "Extra"
         case "gemini-quota": "Gemini"
         case "premium-fast": "Fast Requests"

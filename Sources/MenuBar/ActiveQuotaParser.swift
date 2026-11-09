@@ -45,6 +45,14 @@ enum ActiveQuotaParser {
                 guard let window = json[key] as? [String: Any] else { continue }
                 metric(name, used: window["utilization"], reset: window["resets_at"] as? String ?? "", duration: key == "five_hour" ? 18000 : 604800)
             }
+            // Newer model allowances, such as Fable, appear only as scoped weekly limits.
+            for limit in json["limits"] as? [[String: Any]] ?? [] where limit["kind"] as? String == "weekly_scoped" {
+                let model = (limit["scope"] as? [String: Any])?["model"] as? [String: Any]
+                guard let display = PluginQuotaParser.text(model?["display_name"]) else { continue }
+                let name = "seven-day-" + display.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).joined(separator: "-")
+                guard !models.contains(where: { $0.name == name }) else { continue }
+                metric(name, used: limit["percent"], reset: limit["resets_at"] as? String ?? "", duration: 604800)
+            }
         case "codex":
             let rate = json["rate_limit"] as? [String: Any] ?? [:]
             for (key, fallback) in [("primary_window", "codex-session"), ("secondary_window", "codex-weekly")] {

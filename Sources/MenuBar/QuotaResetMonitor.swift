@@ -7,7 +7,7 @@ enum QuotaResetKind: String, Codable, Sendable {
     static func classify(_ name: String) -> Self? {
         switch name {
         case "five-hour-session", "codex-session", "opencode-go-rolling": return .short
-        case "seven-day-weekly", "seven-day-sonnet", "seven-day-opus", "codex-weekly",
+        case "seven-day-weekly", "seven-day-sonnet", "seven-day-opus", "seven-day-fable", "codex-weekly",
              "opencode-go-weekly", "opencode-go-monthly": return .long
         default:
             if name.hasPrefix("antigravity-") {
@@ -27,6 +27,7 @@ enum QuotaResetKind: String, Codable, Sendable {
         case "opencode-go-monthly": return "Monthly"
         case "seven-day-sonnet": return "Weekly (Sonnet)"
         case "seven-day-opus": return "Weekly (Opus)"
+        case "seven-day-fable": return "Weekly (Fable)"
         default:
             if name.hasPrefix("plugin:"), let window = name.split(separator: ":").last {
                 return window == "rolling" ? "Rolling" : window == "monthly" ? "Monthly" : window == "weekly" ? "Weekly" : "Session"
@@ -37,7 +38,7 @@ enum QuotaResetKind: String, Codable, Sendable {
 
     static func parentMetrics(of name: String) -> [String] {
         switch name {
-        case "five-hour-session", "seven-day-sonnet", "seven-day-opus":
+        case "five-hour-session", "seven-day-sonnet", "seven-day-opus", "seven-day-fable":
             return ["seven-day-weekly"]
         case "codex-session":
             return ["codex-weekly"]

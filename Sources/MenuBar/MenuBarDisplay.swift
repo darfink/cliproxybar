@@ -72,7 +72,7 @@ public struct MenuBarQuotaPair: Equatable, Sendable {
                 from: models,
                 topNames: ["five-hour-session"],
                 topLabelKey: "quota.metric.fiveHour",
-                bottomNames: ["seven-day-weekly", "seven-day-sonnet", "seven-day-opus"],
+                bottomNames: ["seven-day-weekly", "seven-day-sonnet", "seven-day-opus", "seven-day-fable"],
                 bottomLabelKey: "quota.metric.weekly"
             )
         case .codex:

@@ -110,6 +110,7 @@ final class QuotaResetTests: XCTestCase {
             ("claude", "five-hour-session", "seven-day-weekly"),
             ("claude", "seven-day-sonnet", "seven-day-weekly"),
             ("claude", "seven-day-opus", "seven-day-weekly"),
+            ("claude", "seven-day-fable", "seven-day-weekly"),
             ("codex", "codex-session", "codex-weekly"),
             ("opencode-go", "opencode-go-rolling", "opencode-go-weekly"),
             ("opencode-go", "opencode-go-rolling", "opencode-go-monthly"),
