@@ -48,6 +48,8 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     let resetAlerts = QuotaResetAlerts()
     lazy var settingsWindow = SettingsWindow(preferences: preferences, updater: updater, resetAlerts: resetAlerts, onKeySaved: { [weak self] in
         self?.applyEndpoint()
+    }, didRemoveAccount: { [weak self] account, endpoint in
+        self?.didRemoveAccount(account, endpoint: endpoint)
     })
     var commands: StatusBarCommandDispatcher!
     var accounts: [ProxyAccount] = []
@@ -202,6 +204,18 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         connected = false
         refreshing = false
         message = "Connecting to CLIProxyAPI…"
+        render()
+        Task { [weak self] in await self?.refresh() }
+    }
+
+    private func didRemoveAccount(_ account: ProxyAccount, endpoint: URL) {
+        guard client.baseURL == endpoint else { return }
+        // Invalidate any in-flight quota refresh so it cannot restore the deleted row.
+        endpointGeneration += 1
+        refreshing = false
+        accounts.removeAll { $0.identity == account.identity }
+        preferences.updateAvailableProviders(accounts)
+        try? cache.save(accounts)
         render()
         Task { [weak self] in await self?.refresh() }
     }

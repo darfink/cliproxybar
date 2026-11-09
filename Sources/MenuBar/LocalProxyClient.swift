@@ -33,6 +33,8 @@ struct ProxyAccount: Decodable, Sendable {
     let unavailable: Bool?
     let quota: QuotaSignals?
     let model_quotas: [String: QuotaSignals]?
+    var source: String? = nil
+    var runtime_only: Bool? = nil
     var label: String? = nil
     var displayName: String { label?.isEmpty == false ? label! : (email ?? fetchedQuota?.accountDisplayName ?? name) }
     var auth_index: String? = nil
@@ -46,6 +48,13 @@ struct ProxyAccount: Decodable, Sendable {
     var project_id: String? = nil
     var providerDisplayName: String? = nil
     var quotaState: QuotaReadState? = nil
+
+    var canRemoveCredential: Bool {
+        source == "file" && runtime_only != true && !name.isEmpty
+            && name == name.trimmingCharacters(in: .whitespacesAndNewlines)
+            && name.lowercased().hasSuffix(".json") && !name.contains("/")
+            && !name.contains("\\") && auth_index?.isEmpty == false
+    }
 
     var identity: ProxyAccountIdentity { ProxyAccountIdentity(provider: provider, name: name, authIndex: auth_index) }
     var quotaReadState: QuotaReadState {
@@ -107,9 +116,12 @@ struct ProxyAccount: Decodable, Sendable {
 }
 
 enum LocalClientError: LocalizedError {
+    case accountNotRemovable, accountChanged
     case missingKey, keychain(OSStatus), http(Int), invalidEndpoint, missingAuthIndex, providerHTTP(Int), noQuotaData, quotaUnsupported
     var errorDescription: String? {
         switch self {
+        case .accountNotRemovable: "This account must be managed in CLIProxyAPI settings."
+        case .accountChanged: "The credential changed. Reload Accounts before removing it."
         case .missingAuthIndex: "Account has no proxy authentication index."
         case .providerHTTP(let status): "Quota request returned HTTP \(status). Previous readings are retained."
         case .noQuotaData: "The provider returned no supported quota readings."
@@ -196,6 +208,22 @@ struct LocalProxyClient: Sendable {
         return result
     }
 
+    func removeCredential(_ account: ProxyAccount) async throws {
+        guard account.canRemoveCredential else { throw LocalClientError.accountNotRemovable }
+        // Confirm the filename still identifies the credential the user selected.
+        let fresh = try JSONDecoder().decode(AuthEnvelope.self, from: await send(path: "auth-files")).files
+        guard let current = fresh.first(where: { $0.name == account.name }),
+              current.identity == account.identity, current.canRemoveCredential else {
+            throw LocalClientError.accountChanged
+        }
+        struct RemovalResponse: Decodable { let status: String }
+        let data = try await send(path: "auth-files", method: "DELETE",
+                                  query: [URLQueryItem(name: "name", value: account.name)])
+        guard try JSONDecoder().decode(RemovalResponse.self, from: data).status == "ok" else {
+            throw LocalClientError.accountChanged
+        }
+    }
+
     func enableUsageStatistics() async throws {
         _ = try await send(path: "usage-statistics-enabled", body: Data(#"{"value":true}"#.utf8), method: "PUT")
     }
@@ -265,14 +293,14 @@ struct LocalProxyClient: Sendable {
         return body
     }
 
-    private func send(path: String, body: Data? = nil, method: String = "POST", query: [URLQueryItem] = [], timeout: TimeInterval = 20) async throws -> Data {
+    private func send(path: String, body: Data? = nil, method: String? = nil, query: [URLQueryItem] = [], timeout: TimeInterval = 20) async throws -> Data {
         var components = URLComponents(url: baseURL.appendingPathComponent("v0/management/" + path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query }
         var request = URLRequest(url: components.url!)
         request.setValue("Bearer " + (try managementKey()), forHTTPHeaderField: "Authorization")
         request.timeoutInterval = timeout
+        request.httpMethod = method ?? (body == nil ? "GET" : "POST")
         if let body {
-            request.httpMethod = method
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }

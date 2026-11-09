@@ -9,7 +9,7 @@
 | Click the menu bar item | Open the default view. Compact is the initial default. |
 | Option-click the menu bar item | Open the other view. |
 | Press `⌘R` or select **Refresh** | Refresh quotas for all supported accounts. |
-| Open **Settings** with `⌘,` | Change the display, provider visibility, reset alerts, usage collection, proxy URL, or management key. |
+| Open **Settings** with `⌘,` | Change display, accounts, alerts and history, or connection settings. |
 | Hover over an account | Show token history and quota history. |
 | Select **Open Management** | Open the proxy management page in your browser. |
 
@@ -28,6 +28,29 @@ The **Providers** table has separate **Menu bar** and **Drop-down** checkboxes. 
 
 Saved choices remain after relaunch. Hidden providers still receive quota refreshes and retain usage history and alert settings.
 When every provider is hidden, Settings remains available.
+
+### Settings
+
+Settings opens on **Display** by default. All four tabs stay visible across the top of the window.
+
+| Tab | Controls |
+| --- | --- |
+| **Display** | Quota display, paired percentages, countdowns, default menu layout, and provider visibility. |
+| **Accounts** | Provider credentials and removal. |
+| **Alerts & History** | Reset notifications, confetti, quota recording, and token collection. |
+| **Connection** | Proxy URL, management key, and automatic updates. |
+
+The footer shows the app version, **Check for Updates…**, and **Done** in every tab.
+
+### Accounts
+
+Open **Settings → Accounts** to view provider credentials connected to CLIProxyAPI. Credential file rows show the exact filename, including its file extension.
+
+Provider visibility only hides accounts from the selected app views. It does not remove credentials or stop proxy routing.
+
+To remove an account, select **Remove** and confirm. CLIProxyBar asks CLIProxyAPI to delete that credential. The proxy then stops routing requests through that account.
+
+Accounts managed by proxy settings and runtime accounts cannot be removed in CLIProxyBar. Remove them through the CLIProxyAPI settings instead. Configured plugin keys can appear again until you remove them from the proxy configuration.
 
 ## Quota reset alerts
 
@@ -61,7 +84,7 @@ When you hover over the graph, it shows the nearest recorded percentage and read
 When readings are more than 15 minutes apart, the graph leaves a gap.
 Drops show decreases in reported usage. They can mark quota recovery or resets.
 
-**Settings → Usage history → Record quota history** controls quota recording independently of token collection. Recording is on by default. The app saves fresh quota readings during existing refreshes, with no extra API requests. Current CLIProxyAPI quota endpoints do not provide earlier percentage history. Cached readings and failed requests do not create observations.
+**Settings → Alerts & History → Record quota history** controls quota recording independently of token collection. Recording is on by default. The app saves fresh quota readings during existing refreshes, with no extra API requests. Current CLIProxyAPI quota endpoints do not provide earlier percentage history. Cached readings and failed requests do not create observations.
 
 The app saves up to 30 days of local quota history, with bounded samples per quota window. When recording is off, saved history remains. Each proxy URL has separate history. The history records timestamps, percentages, and hashed identifiers. It contains no provider credentials or raw API responses. See the [privacy guide](PRIVACY.md) for full storage details.
 
@@ -72,8 +95,9 @@ Providers without quota percentages, such as Gemini API key accounts, keep the t
 To collect token usage:
 
 1. Open **Settings** with `⌘,`.
-2. Enable **Collect token usage**.
-3. Hover over an account in the compact or expanded menu.
+2. Select **Alerts & History**.
+3. Enable **Collect token usage**.
+4. Hover over an account in the compact or expanded menu.
 
 This setting enables `usage-statistics-enabled` through the management API. CLIProxyAPI saves this setting.
 
