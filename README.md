@@ -17,7 +17,7 @@ With [Homebrew](https://brew.sh) installed, run:
 brew tap darfink/cliproxybar https://github.com/darfink/cliproxybar.git && brew install --cask darfink/cliproxybar/cliproxybar && open -a CLIProxyBar
 ```
 
-In **Settings**:
+In **Settings → Connection**:
 
 1. Enter your proxy URL. The default is `http://127.0.0.1:8317`.
 2. Select **Apply**.
@@ -117,7 +117,7 @@ Quota availability depends on the provider, plugin, and CLIProxyAPI version.
 | ⌘, | Open Settings |
 | Hover over an account | Show token and quota history |
 
-Automatic quota refresh runs every five minutes. **Settings** controls the default view, visible providers, history, and reset alerts.
+Automatic quota refresh runs every five minutes. **Settings** controls the default view, visible providers, accounts, history, and reset alerts.
 Token history requires **Collect token usage**. Quota history recording is on by default.
 
 [Full user guide →](docs/USER_GUIDE.md)
@@ -126,7 +126,7 @@ Token history requires **Collect token usage**. Quota history recording is on by
 
 CLIProxyBar checks GitHub Releases through [Sparkle](https://sparkle-project.org).
 Automatic update checks are on by default. Automatic downloads and installation are off by default.
-**Settings → App updates** includes a manual update check.
+**Settings → Connection** has the update settings. Every Settings tab has **Check for Updates…** in its footer.
 
 Before a Homebrew update, quit CLIProxyBar.
 

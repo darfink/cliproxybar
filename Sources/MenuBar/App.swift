@@ -154,7 +154,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
             defaultExpanded: { [unowned self] in preferences.defaultMenuView == .expanded })
         render()
         do { _ = try ManagementKey.read() }
-        catch LocalClientError.missingKey { settingsWindow.show() }
+        catch LocalClientError.missingKey { settingsWindow.show(section: .connection) }
         catch { /* The refresh result reports Keychain errors without changing settings. */ }
         if CommandLine.arguments.contains("--smoke-cache-test") {
             let menu = StatusBarMenuRenderer(snapshot: snapshot(), commands: commands).buildMenu()

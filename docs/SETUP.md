@@ -33,9 +33,9 @@ The tap lives in the app repository. Each release updates its version and SHA-25
 
 ## Connect to CLIProxyAPI
 
-When no management key exists, the app opens Settings on first launch.
+When no management key exists, the app opens **Settings → Connection** on first launch.
 
-1. Open **Settings** with ⌘,.
+1. Open **Settings** with ⌘, and select **Connection**.
 2. Enter the proxy URL. The default is `http://127.0.0.1:8317`.
 3. Select **Apply**.
 4. Enter your CLIProxyAPI management key.

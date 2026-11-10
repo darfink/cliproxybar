@@ -10,6 +10,7 @@ final class SettingsWindow {
     private let resetAlerts: QuotaResetAlerts
     private let didRemoveAccount: (ProxyAccount, URL) -> Void
     private let onKeySaved: () -> Void
+    private let navigation = SettingsNavigation()
     init(preferences: DisplayPreferences, updater: AppUpdater, resetAlerts: QuotaResetAlerts, onKeySaved: @escaping () -> Void, didRemoveAccount: @escaping (ProxyAccount, URL) -> Void) {
         self.didRemoveAccount = didRemoveAccount
         self.preferences = preferences
@@ -18,14 +19,15 @@ final class SettingsWindow {
         self.onKeySaved = onKeySaved
     }
 
-    func show() {
+    func show(section: SettingsSection? = nil) {
+        if let section { navigation.selection = section }
         if window == nil {
             let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 660), styleMask: [.titled, .closable], backing: .buffered, defer: false)
             panel.title = "CLIProxyBar Settings"
             panel.isReleasedWhenClosed = false
             panel.contentView = NSHostingView(rootView: SettingsTabsView(preferences: preferences, updater: updater,
                 resetAlerts: resetAlerts, onKeySaved: onKeySaved, didRemoveAccount: didRemoveAccount,
-                close: { [weak panel] in panel?.close() }))
+                navigation: navigation, close: { [weak panel] in panel?.close() }))
             panel.center()
             window = panel
         }
@@ -41,17 +43,23 @@ enum SettingsSection: String, CaseIterable {
     case connection = "Connection"
 }
 
+@MainActor @Observable
+final class SettingsNavigation {
+    var selection: SettingsSection = .display
+}
+
 private struct SettingsTabsView: View {
     @Bindable var preferences: DisplayPreferences
     @Bindable var updater: AppUpdater
     let resetAlerts: QuotaResetAlerts
     let onKeySaved: () -> Void
     let didRemoveAccount: (ProxyAccount, URL) -> Void
+    @Bindable var navigation: SettingsNavigation
     let close: () -> Void
-    @State private var selection: SettingsSection = .display
+    private var selection: SettingsSection { navigation.selection }
 
     var body: some View {
-        SettingsLayout(selection: $selection) {
+        SettingsLayout(selection: $navigation.selection) {
             // Keep panels mounted so tab changes preserve drafts and scroll positions.
             ZStack {
                 pane(.display) { DisplaySettingsView(preferences: preferences) }
