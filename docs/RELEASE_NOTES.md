@@ -1,23 +1,21 @@
-CLIProxyBar 0.4.4 adds quota history, reset countdowns, and Claude plan badges:
+CLIProxyBar 0.4.5 adds Claude Fable usage, Settings tabs, and account removal:
 
-- Quota usage graphs with session, weekly, monthly, and other windows on one 0–100% scale.
-- Connected lines, a compact color legend, and hover values from recorded observations.
-- Time ranges of 5 hours, 24 hours, 7 days, and 30 days, with gaps for missing observations.
-- Separate Token history and Quota history tabs, with a stable header and shared card height.
-- Token history as the initial default. The app remembers explicit tab choices across accounts and restarts.
-- Optional reset countdowns for exhausted quotas in the menu bar and compact menu. Both settings start off.
-- Claude Pro, Max 5×, and Max 20× badges from the OAuth profile through CLIProxyAPI.
-- Updated README screenshots in light and dark mode, with fictional accounts and sample data.
+- Claude Fable weekly usage, with its own reset time and reset alerts.
+- Settings tabs for Display, Accounts, Alerts & History, and Connection.
+- An Accounts tab that lists the provider credentials on your CLIProxyAPI.
+- Credential file removal from the Accounts tab, after confirmation.
+- No reset alerts or confetti for a session or model window while its weekly or monthly quota stays exhausted.
 
-Quota recording starts on by default and uses existing quota refreshes, without extra quota requests.
-The app saves up to 30 days locally. Earlier quota history is unavailable from the current CLIProxyAPI endpoints.
-Only timestamps, percentages, and hashed identifiers reach the quota history file.
+Anthropic reports Fable only as a scoped weekly limit. Other scoped model limits also appear when Anthropic reports them.
+The menu bar weekly percentage shows the Claude weekly window closest to its limit, including Fable.
 
-Countdowns use reported future reset times. Missing reset times retain the percentage.
-Quota usage that merely rounds to 100% does not trigger a countdown.
-Claude profile lookups use a one-hour cache. Profile errors retain known plan labels and do not stop quota updates.
+Removal deletes the credential from CLIProxyAPI. This affects every client of that proxy. Add the credential again to restore access.
+Accounts from proxy settings and runtime accounts stay read-only. Manage them in CLIProxyAPI.
+Saved usage and quota history remain after removal.
 
-Tests cover graph gaps and hover readings, stable panel geometry, saved preferences, countdown selection, and Claude profile integration.
+Without a management key, the app now opens Settings on the Connection tab.
+
+Tests cover scoped Claude limits, credential removal checks, Settings navigation, and parent quota suppression.
 
 Requires macOS 14 or later and a CLIProxyAPI instance with management access.
 OpenCode Go requires a plugin with native generic quota support.
