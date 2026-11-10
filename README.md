@@ -14,7 +14,7 @@ CLIProxyBar requires **macOS 14 Sonoma or later**, on Apple Silicon or Intel, an
 With [Homebrew](https://brew.sh) installed, run:
 
 ```sh
-brew tap darfink/cliproxybar https://github.com/darfink/cliproxybar.git && brew install --cask darfink/cliproxybar/cliproxybar && open -a CLIProxyBar
+brew tap darfink/cliproxybar https://github.com/darfink/cliproxybar.git && brew install --cask darfink/cliproxybar/cliproxybar && xattr -dr com.apple.quarantine /Applications/CLIProxyBar.app && open -a CLIProxyBar
 ```
 
 In **Settings → Connection**:
@@ -26,8 +26,9 @@ In **Settings → Connection**:
 
 The management key is different from a client API key. CLIProxyAPI manages your provider accounts and the proxy service.
 
-Current releases have no Apple notarization.
-If macOS blocks the app, select **System Settings → Privacy & Security → Open Anyway**.
+Current releases have no Apple notarization. The `xattr` command removes the download quarantine, so macOS opens the app without a block.
+If you install apps to another folder, such as `~/Applications`, change the path in the command.
+Alternatively, select **System Settings → Privacy & Security → Open Anyway** after macOS blocks the app.
 
 [Manual installation and remote connections →](docs/SETUP.md)
 

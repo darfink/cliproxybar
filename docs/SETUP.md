@@ -59,7 +59,13 @@ The browser management page handles its own authentication. The app does not put
 
 The default release uses an ad hoc signature and has no Apple notarization.
 
-If macOS blocks the app after the first launch attempt, select **System Settings → Privacy & Security → Open Anyway**.
+To open the app without a block, remove the download quarantine. Use the folder that contains the app:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/CLIProxyBar.app
+```
+
+If macOS blocks the app after the first launch attempt, you can also select **System Settings → Privacy & Security → Open Anyway**.
 
 ## Updates and migration
 
