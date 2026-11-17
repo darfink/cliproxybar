@@ -68,6 +68,16 @@ final class GeminiAPIKeyTests: XCTestCase {
         XCTAssertEqual(identities[0], identities[1])
     }
 
+    func testUntypedAuthDirectoryFilesAreNotAccounts() async throws {
+        let client = try client { request in
+            request.url!.path.hasSuffix("auth-files")
+                ? (200, #"{"files":[{"name":"catalogs/models.json","provider":"unknown","auth_index":"catalog"},{"name":"fixture.json","provider":"claude","auth_index":"oauth"}]}"#)
+                : (404, "{}")
+        }
+        let accounts = try await client.fetch()
+        XCTAssertEqual(accounts.map(\.name), ["fixture.json"])
+    }
+
     func testOlderBackendsKeepTheirAccountList() async throws {
         for status in [404, 501] {
             let client = try client { request in

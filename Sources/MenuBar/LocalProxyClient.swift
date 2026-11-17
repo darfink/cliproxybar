@@ -184,7 +184,10 @@ struct LocalProxyClient: Sendable {
         baseURL = url
     }
     func fetch() async throws -> [ProxyAccount] {
+        // CLIProxyAPI lists every JSON file in its auth directory. Files without a
+        // provider type, such as model catalogs, are not credentials.
         let accounts = try JSONDecoder().decode(AuthEnvelope.self, from: await send(path: "auth-files")).files
+            .filter { $0.provider.lowercased() != "unknown" }
         let envelope: GeminiAPIKeyEnvelope
         do {
             envelope = try JSONDecoder().decode(GeminiAPIKeyEnvelope.self, from: await send(path: "gemini-api-key"))
