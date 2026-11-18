@@ -1,9 +1,9 @@
-CLIProxyBar 0.4.6 hides files that are not provider credentials:
+CLIProxyBar 0.4.7 opens the drop-down faster:
 
-- CLIProxyAPI lists every JSON file in its auth directory, including model catalogs. Files without a provider type no longer appear as Unknown accounts.
-- These files no longer appear in the menu bar, the drop-down, or the Accounts tab.
+- The drop-down no longer builds the token and quota history view of every account when it opens.
+- Each account's history view loads when you first hover over that account.
 
-To remove them from CLIProxyAPI as well, keep model catalogs and other non-credential files outside the proxy `auth-dir`.
+On a test Mac with four accounts, building these views took about 290 ms of each open.
 
 Requires macOS 14 or later and a CLIProxyAPI instance with management access.
 OpenCode Go requires a plugin with native generic quota support.
