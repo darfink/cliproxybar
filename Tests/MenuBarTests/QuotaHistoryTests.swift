@@ -250,7 +250,9 @@ final class QuotaHistoryTests: XCTestCase {
             appearanceMode: .system, language: .english)
         for expanded in [false, true] {
             let menu = StatusBarMenuRenderer(snapshot: snapshot, commands: commands, expanded: expanded).buildMenu()
-            let submenu = try XCTUnwrap(menu.items.first { $0.submenu is UsageSubmenu }?.submenu)
+            let submenu = try XCTUnwrap(menu.items.first { $0.submenu is UsageSubmenu }?.submenu as? UsageSubmenu)
+            XCTAssertNil(submenu.items.first?.view, "Opening the drop-down must not build hover details")
+            submenu.menuNeedsUpdate(submenu)
             let view = try XCTUnwrap(submenu.items.first?.view)
             XCTAssertEqual(view.frame.width, 520)
             XCTAssertLessThan(view.frame.height, 600)

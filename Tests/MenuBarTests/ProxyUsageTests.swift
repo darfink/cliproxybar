@@ -133,6 +133,7 @@ final class ProxyUsageTests: XCTestCase {
             XCTAssertTrue(submenu.anchorItem === anchor)
             XCTAssertTrue(submenu.delegate === submenu)
             XCTAssertNil(submenu.items.first?.action)
+            submenu.menuNeedsUpdate(submenu)
             let content = try XCTUnwrap(submenu.items.first?.view)
             XCTAssertEqual(content.frame.width, 520)
 

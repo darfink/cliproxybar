@@ -51,6 +51,7 @@ final class UsageMenuInteractionTests: XCTestCase {
         let submenu = UsageSubmenu(usage: usage, provider: .claude, accountName: "Fixture", anchor: anchor,
             appearance: nil, locale: .current, quotaHistory: history, defaults: defaults)
         anchor.submenu = submenu
+        submenu.menuNeedsUpdate(submenu)
         let item = try XCTUnwrap(submenu.items.first)
         let hosting = try XCTUnwrap(item.view)
         _ = NSApplication.shared
@@ -224,6 +225,7 @@ final class UsageMenuInteractionTests: XCTestCase {
         parent.orderFrontRegardless()
         let submenu = UsageSubmenu(usage: ProxyUsageSnapshot(), provider: .codex, accountName: "Fixture",
             anchor: anchor, appearance: nil, locale: .current)
+        submenu.menuNeedsUpdate(submenu)
         let hosting = try XCTUnwrap(submenu.items[0].view)
         var actual: NSRect?
         var expected: NSRect?

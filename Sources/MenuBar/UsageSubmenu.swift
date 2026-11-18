@@ -53,9 +53,18 @@ final class UsageSubmenu: NSMenu, NSMenuDelegate {
         autoenablesItems = false
         showsStateColumn = false
         delegate = self
-
-        detailItem.view = makeDetailView()
+        // Building every account's detail view costs most of the time to open
+        // the drop-down. Build it when AppKit first needs this submenu instead.
         addItem(detailItem)
+    }
+
+    func loadDetail() {
+        guard detailItem.view == nil else { return }
+        detailItem.view = makeDetailView()
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        loadDetail()
     }
 
     private func makeDetailView() -> NSView {
@@ -98,6 +107,8 @@ final class UsageSubmenu: NSMenu, NSMenuDelegate {
     func confinementRect(for menu: NSMenu, on screen: NSScreen?) -> NSRect {
         guard let view = anchorItem?.view, let window = view.window,
               let screen = screen ?? window.screen, !view.visibleRect.isEmpty else { return .zero }
+        // Placement needs the detail's measured size.
+        loadDetail()
         let anchor = window.convertToScreen(view.convert(view.visibleRect, to: nil))
         // Use the public positioning delegate, never modify AppKit's menu window.
         return UsageMenuPlacement.calculate(anchor: anchor, menu: window.frame,
