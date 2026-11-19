@@ -350,7 +350,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         }
     }
     func snapshot() -> StatusBarMenuSnapshot {
-        let providers = StatusBarMenuProviderSnapshot.grouping(accounts, refreshing: refreshing,
+        let providers = StatusBarMenuProviderSnapshot.grouping(accounts.map { preferences.displayed($0) }, refreshing: refreshing,
             isVisible: preferences.showsInDropdown, quotaHistory: { quotaHistory.snapshot(for: $0) }) { usageCollector.snapshot(for: $0) }
         let hiddenCount = Set(accounts.compactMap { QuotaProvider(rawValue: $0.provider) })
             .filter { !preferences.showsInDropdown($0) }.count
@@ -361,8 +361,9 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
     }
     func render() {
         if let selected, !preferences.showsInDropdown(selected) { self.selected = nil }
-        let hasReadings = accounts.contains { $0.providerQuota().models.contains { $0.percentage >= 0 } }
-        let items = accounts.compactMap { account -> MenuBarQuotaDisplayItem? in
+        let displayed = accounts.map { preferences.displayed($0) }
+        let hasReadings = displayed.contains { $0.providerQuota().models.contains { $0.percentage >= 0 } }
+        let items = displayed.compactMap { account -> MenuBarQuotaDisplayItem? in
             guard let provider = QuotaProvider(rawValue: account.provider), preferences.showsInMenuBar(provider) else { return nil }
             let quota = account.providerQuota()
             let lowest = MenuBarQuotaMetric.lowest(in: MenuBarQuotaPair.primaryModels(for: provider, from: quota.models), labelKey: "")

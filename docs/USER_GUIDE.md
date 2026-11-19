@@ -29,13 +29,17 @@ The **Providers** table has separate **Menu bar** and **Drop-down** checkboxes. 
 Saved choices remain after relaunch. Hidden providers still receive quota refreshes and retain usage history and alert settings.
 When every provider is hidden, Settings remains available.
 
+**Quota windows** lists optional windows that your accounts report, such as Claude Fable weekly or Antigravity Claude & GPT.
+A hidden window leaves the menu bar, the drop-down, and quota history. A hidden Fable window no longer sets the Claude weekly percentage in the menu bar.
+The app still records hidden windows and still sends their reset alerts.
+
 ### Settings
 
 Settings opens on **Display** by default. All four tabs stay visible across the top of the window.
 
 | Tab | Controls |
 | --- | --- |
-| **Display** | Quota display, paired percentages, countdowns, default menu layout, and provider visibility. |
+| **Display** | Quota display, paired percentages, countdowns, default menu layout, provider visibility, and optional quota windows. |
 | **Accounts** | Provider credentials and removal. |
 | **Alerts & History** | Reset notifications, confetti, quota recording, and token collection. |
 | **Connection** | Proxy URL, management key, and automatic updates. |

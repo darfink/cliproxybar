@@ -31,6 +31,9 @@ final class DisplayPreferences {
     private(set) var hiddenDropdownProviders: Set<String>
     private(set) var availableProviders: [QuotaProvider] = QuotaProvider.allCases.filter { ActiveQuotaParser.supports($0.rawValue) }
     private(set) var providerNames: [QuotaProvider: String] = [:]
+    private(set) var hiddenQuotaWindows: Set<String>
+    /// Optional windows reported by at least one account, offered in Settings.
+    private(set) var availableQuotaWindows: [OptionalQuotaWindow] = []
 
     func updateAvailableProviders(_ accounts: [ProxyAccount]) {
         providerNames = Dictionary(accounts.compactMap { account -> (QuotaProvider, String)? in
@@ -40,6 +43,31 @@ final class DisplayPreferences {
         let configured = accounts.compactMap { QuotaProvider(rawValue: $0.provider) }
         let builtIn = QuotaProvider.allCases.filter { ActiveQuotaParser.supports($0.rawValue) }
         availableProviders = Set(configured + builtIn).sorted { providerName($0) < providerName($1) }
+        let reported = Set(accounts.flatMap { $0.providerQuota().models.map(\.name) })
+        availableQuotaWindows = OptionalQuotaWindow.allCases.filter { !reported.isDisjoint(with: $0.metricNames) }
+    }
+
+    func showsQuotaWindow(_ window: OptionalQuotaWindow) -> Bool {
+        !hiddenQuotaWindows.contains(window.rawValue)
+    }
+
+    func setQuotaWindowVisible(_ visible: Bool, for window: OptionalQuotaWindow) {
+        guard visible != showsQuotaWindow(window) else { return }
+        if visible { hiddenQuotaWindows.remove(window.rawValue) }
+        else { hiddenQuotaWindows.insert(window.rawValue) }
+        defaults.set(hiddenQuotaWindows.sorted(), forKey: "hiddenQuotaWindows")
+        onChange?()
+    }
+
+    /// Removes hidden windows from what the menu bar, drop-down, and history show.
+    /// Quota recording and reset alerts keep using the full readings.
+    func displayed(_ account: ProxyAccount) -> ProxyAccount {
+        let hidden = Set(OptionalQuotaWindow.allCases.filter { !showsQuotaWindow($0) }.flatMap(\.metricNames))
+        guard !hidden.isEmpty, var quota = account.fetchedQuota, quota.models.contains(where: { hidden.contains($0.name) }) else { return account }
+        quota.models.removeAll { hidden.contains($0.name) }
+        var result = account
+        result.fetchedQuota = quota
+        return result
     }
 
     func providerName(_ provider: QuotaProvider) -> String { providerNames[provider] ?? provider.displayName }
@@ -150,6 +178,7 @@ final class DisplayPreferences {
         self.defaults = defaults
         hiddenMenuBarProviders = Set(defaults.stringArray(forKey: "hiddenMenuBarProviders") ?? [])
         hiddenDropdownProviders = Set(defaults.stringArray(forKey: "hiddenDropdownProviders") ?? [])
+        hiddenQuotaWindows = Set(defaults.stringArray(forKey: "hiddenQuotaWindows") ?? [])
         endpoint = defaults.string(forKey: "endpoint") ?? "http://127.0.0.1:8317"
         mode = defaults.string(forKey: "quotaDisplayMode").flatMap(QuotaDisplayMode.init(rawValue:)) ?? .used
         showsBothMenuBarQuotas = defaults.object(forKey: "showsBothMenuBarQuotas") == nil
@@ -162,5 +191,34 @@ final class DisplayPreferences {
         notifiesShortResets = defaults.bool(forKey: "notifiesShortResets")
         notifiesLongResets = defaults.bool(forKey: "notifiesLongResets")
         celebratesLongResets = defaults.bool(forKey: "celebratesLongResets")
+    }
+}
+
+/// Quota windows that some people never use. Each can be hidden from the app's views.
+enum OptionalQuotaWindow: String, CaseIterable, Identifiable {
+    case claudeFable, claudeSonnet, claudeOpus, antigravityClaudeGPT
+
+    var id: String { rawValue }
+
+    var provider: QuotaProvider {
+        self == .antigravityClaudeGPT ? .antigravity : .claude
+    }
+
+    var title: String {
+        switch self {
+        case .claudeFable: "Fable weekly"
+        case .claudeSonnet: "Sonnet weekly"
+        case .claudeOpus: "Opus weekly"
+        case .antigravityClaudeGPT: "Claude & GPT"
+        }
+    }
+
+    var metricNames: Set<String> {
+        switch self {
+        case .claudeFable: ["seven-day-fable"]
+        case .claudeSonnet: ["seven-day-sonnet"]
+        case .claudeOpus: ["seven-day-opus"]
+        case .antigravityClaudeGPT: ["antigravity-claude-gpt-session", "antigravity-claude-gpt-weekly"]
+        }
     }
 }

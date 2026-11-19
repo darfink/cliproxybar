@@ -37,6 +37,18 @@ struct ProviderVisibilitySettingsView: View {
             }
             Text("Visibility does not change quota refreshes or your alert settings.")
                 .font(.caption).foregroundStyle(.secondary)
+            if !preferences.availableQuotaWindows.isEmpty {
+                Text("Quota windows").font(.headline).padding(.top, 6)
+                ForEach(preferences.availableQuotaWindows) { window in
+                    Toggle("\(preferences.providerName(window.provider)): \(window.title)", isOn: Binding(
+                        get: { preferences.showsQuotaWindow(window) },
+                        set: { preferences.setQuotaWindowVisible($0, for: window) }
+                    ))
+                    .toggleStyle(.checkbox)
+                }
+                Text("Hidden windows leave the menu bar, drop-down, and quota history. Recording and reset alerts continue.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 }

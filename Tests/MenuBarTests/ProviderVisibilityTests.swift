@@ -11,6 +11,52 @@ final class ProviderVisibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testHiddenQuotaWindowsLeaveDisplayedReadingsAndPersist() throws {
+        let suite = "ProviderVisibilityTests." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = DisplayPreferences(defaults: defaults)
+        var claude = account("claude")
+        claude.recordQuota(ProviderQuota(models: [
+            QuotaMetric(name: "five-hour-session", percentage: 90, resetTime: ""),
+            QuotaMetric(name: "seven-day-weekly", percentage: 80, resetTime: ""),
+            QuotaMetric(name: "seven-day-fable", percentage: 10, resetTime: "")
+        ], lastUpdated: Date()))
+        var antigravity = account("antigravity", name: "second")
+        antigravity.recordQuota(ProviderQuota(models: [
+            QuotaMetric(name: "antigravity-gemini-session", percentage: 70, resetTime: ""),
+            QuotaMetric(name: "antigravity-claude-gpt-session", percentage: 5, resetTime: ""),
+            QuotaMetric(name: "antigravity-claude-gpt-weekly", percentage: 5, resetTime: "")
+        ], lastUpdated: Date()))
+        preferences.updateAvailableProviders([claude, antigravity])
+        XCTAssertEqual(preferences.availableQuotaWindows, [.claudeFable, .antigravityClaudeGPT])
+        XCTAssertEqual(preferences.displayed(claude).providerQuota().models.count, 3)
+
+        var changes = 0
+        preferences.onChange = { changes += 1 }
+        preferences.setQuotaWindowVisible(false, for: .claudeFable)
+        preferences.setQuotaWindowVisible(false, for: .antigravityClaudeGPT)
+        preferences.setQuotaWindowVisible(false, for: .antigravityClaudeGPT)
+        XCTAssertEqual(changes, 2)
+        let shownClaude = preferences.displayed(claude)
+        XCTAssertEqual(shownClaude.providerQuota().models.map(\.name), ["five-hour-session", "seven-day-weekly"])
+        XCTAssertEqual(shownClaude.quotaReadState, claude.quotaReadState)
+        // A hidden Fable window no longer drives the weekly menu bar figure.
+        XCTAssertEqual(MenuBarQuotaPair.resolve(for: .claude, from: shownClaude.providerQuota().models)?.bottom.remainingPercentage, 80)
+        XCTAssertEqual(preferences.displayed(antigravity).providerQuota().models.map(\.name), ["antigravity-gemini-session"])
+        // The source readings stay complete for recording and alerts.
+        XCTAssertEqual(claude.providerQuota().models.count, 3)
+        // Hidden windows stay offered so they can be shown again.
+        preferences.updateAvailableProviders([claude, antigravity])
+        XCTAssertEqual(preferences.availableQuotaWindows, [.claudeFable, .antigravityClaudeGPT])
+
+        let reopened = DisplayPreferences(defaults: defaults)
+        XCTAssertFalse(reopened.showsQuotaWindow(.claudeFable))
+        XCTAssertFalse(reopened.showsQuotaWindow(.antigravityClaudeGPT))
+        XCTAssertTrue(reopened.showsQuotaWindow(.claudeOpus))
+    }
+
+    @MainActor
     func testDropdownFiltersEveryAccountWithoutChangingMenuBarChoicesOrSourceData() throws {
         let suite = "ProviderVisibilityTests." + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
