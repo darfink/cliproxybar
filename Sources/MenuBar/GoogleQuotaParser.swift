@@ -44,7 +44,10 @@ enum GoogleQuotaParser {
             let group = metric.name.hasPrefix("antigravity-gemini-") ? 0 : metric.name.hasPrefix("antigravity-claude-gpt-") ? 1 : 2
             return (group, metric.name.hasSuffix("-session") ? 0 : metric.name.hasSuffix("-weekly") ? 1 : 2)
         }
-        let ordered = models.enumerated().sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }.map(\.element)
+        let ordered = models.enumerated().sorted {
+            let (left, right) = (rank($0.element), rank($1.element))
+            return (left.0, left.1, $0.offset) < (right.0, right.1, $1.offset)
+        }.map(\.element)
         return ProviderQuota(models: ordered, lastUpdated: now)
     }
 
