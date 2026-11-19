@@ -136,6 +136,7 @@ final class ProviderIntegrationTests: XCTestCase {
             let call = try JSONDecoder().decode(ProxyAPICall.self, from: request.httpBody!)
             XCTAssertEqual(call.authIndex, "fixture-index")
             XCTAssertEqual(call.header?["Authorization"], "Bearer $TOKEN$")
+            XCTAssertEqual(call.header?["User-Agent"], "antigravity/3.0.0 Darwin/arm64")
             XCTAssertEqual(call.method, "POST")
             let reply: String
             if call.url.hasSuffix("loadCodeAssist") {
@@ -151,6 +152,22 @@ final class ProviderIntegrationTests: XCTestCase {
         XCTAssertEqual(quota.models.map(\.percentage), [25, 75])
         XCTAssertEqual(quota.models.map(\.windowDuration), [18000, 604800])
         XCTAssertEqual(quota.planType, "Pro")
+    }
+
+    func testAntigravityGeminiWindowsLeadAndClaudeGPTWindowsArePrefixed() throws {
+        let body = #"{"groups":[{"displayName":"Claude and GPT models","buckets":[{"window":"weekly","remainingFraction":0.9},{"window":"5h","remainingFraction":0.2}]},{"displayName":"Gemini Models","buckets":[{"window":"weekly","remainingFraction":0.6},{"window":"5h","remainingFraction":0.8}]}]}"#
+        let quota = try GoogleQuotaParser.summary(Data(body.utf8))
+        XCTAssertEqual(quota.models.map(\.name), ["antigravity-gemini-session", "antigravity-gemini-weekly",
+            "antigravity-claude-gpt-session", "antigravity-claude-gpt-weekly"])
+        XCTAssertEqual(quota.models.map(\.displayName), ["5 hours", "Weekly", "Claude & GPT · 5 hours", "Claude & GPT · Weekly"])
+        // The menu bar summarizes Gemini even when Claude & GPT is closer to its limit.
+        let pair = try XCTUnwrap(MenuBarQuotaPair.resolve(for: .antigravity, from: quota.models))
+        XCTAssertEqual([pair.top.remainingPercentage, pair.bottom.remainingPercentage], [80, 60])
+        XCTAssertEqual(MenuBarQuotaMetric.lowest(in: MenuBarQuotaPair.primaryModels(for: .antigravity, from: quota.models),
+            labelKey: "")?.remainingPercentage, 60)
+        let claudeOnly = Array(quota.models.suffix(2))
+        let fallback = try XCTUnwrap(MenuBarQuotaPair.resolve(for: .antigravity, from: claudeOnly))
+        XCTAssertEqual([fallback.top.remainingPercentage, fallback.bottom.remainingPercentage], [20, 90])
     }
 
     func testAntigravityFallbackDoesNotTurnMissingOrInvalidQuotaIntoZero() async throws {

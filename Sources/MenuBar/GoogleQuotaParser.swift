@@ -30,13 +30,22 @@ enum GoogleQuotaParser {
                 }
                 let name = "antigravity-\(groupID)-\(period)"
                 guard !models.contains(where: { $0.name == name }) else { continue }
+                let windowLabel = period == "session" ? "5 hours" : period == "weekly" ? "Weekly" : window.isEmpty ? "Quota" : window.capitalized
+                // Gemini is Antigravity's own allowance, so its windows need no prefix.
+                let groupLabel = groupID == "gemini" ? nil : groupID == "claude-gpt" ? "Claude & GPT" : groupName
                 models.append(QuotaMetric(name: name, percentage: fraction * 100,
                     resetTime: bucket["resetTime"] as? String ?? bucket["reset_time"] as? String ?? bucket["resetAt"] as? String ?? "",
-                    windowDuration: duration, label: groupName + " · " + (period == "session" ? "Session" : period == "weekly" ? "Weekly" : window.isEmpty ? "Quota" : window.capitalized)))
+                    windowDuration: duration, label: groupLabel.map { $0 + " · " + windowLabel } ?? windowLabel))
             }
         }
         guard !models.isEmpty else { throw LocalClientError.noQuotaData }
-        return ProviderQuota(models: models, lastUpdated: now)
+        // Show Gemini first, then Claude & GPT, each with the session before the weekly window.
+        func rank(_ metric: QuotaMetric) -> (Int, Int) {
+            let group = metric.name.hasPrefix("antigravity-gemini-") ? 0 : metric.name.hasPrefix("antigravity-claude-gpt-") ? 1 : 2
+            return (group, metric.name.hasSuffix("-session") ? 0 : metric.name.hasSuffix("-weekly") ? 1 : 2)
+        }
+        let ordered = models.enumerated().sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }.map(\.element)
+        return ProviderQuota(models: ordered, lastUpdated: now)
     }
 
     static func models(_ data: Data, now: Date = Date()) throws -> ProviderQuota {

@@ -365,7 +365,7 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
         let items = accounts.compactMap { account -> MenuBarQuotaDisplayItem? in
             guard let provider = QuotaProvider(rawValue: account.provider), preferences.showsInMenuBar(provider) else { return nil }
             let quota = account.providerQuota()
-            let lowest = MenuBarQuotaMetric.lowest(in: quota.models, labelKey: "")
+            let lowest = MenuBarQuotaMetric.lowest(in: MenuBarQuotaPair.primaryModels(for: provider, from: quota.models), labelKey: "")
             return MenuBarQuotaDisplayItem(id: account.name, providerSymbol: provider.menuBarSymbol, accountShort: "", percentage: lowest?.remainingPercentage ?? -1, provider: provider, isForbidden: quota.isForbidden, quotaPair: preferences.showsBothMenuBarQuotas ? MenuBarQuotaPair.resolve(for: provider, from: quota.models) : nil, resetAt: lowest?.resetAt, showsResetCountdown: preferences.showsResetCountdownInMenuBar)
         }
         statusBar.updateStatusBar(items: items, colorMode: .monochrome, quotaDisplayMode: preferences.mode, isRunning: connected || hasReadings, showMenuBarIcon: true, showQuota: hasReadings, appearanceMode: .system, language: .english, isRefreshing: refreshing)

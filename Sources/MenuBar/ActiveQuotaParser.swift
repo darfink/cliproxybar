@@ -10,10 +10,11 @@ enum ActiveQuotaParser {
             || pluginProviders.contains(QuotaProviderRegistry.normalize(account.provider))
     }
 
+    // Google omits the Gemini quota group for Antigravity clients older than 3.0.
     static func googleRequest(for account: ProxyAccount, operation: String, payload: String) throws -> ProxyAPICall {
         guard let index = account.auth_index, !index.isEmpty else { throw LocalClientError.missingAuthIndex }
         return ProxyAPICall(authIndex: index, method: "POST", url: "https://cloudcode-pa.googleapis.com/v1internal:" + operation,
-            header: ["Authorization": "Bearer $TOKEN$", "Content-Type": "application/json", "User-Agent": "antigravity/1.11.3 Darwin/arm64"], data: payload)
+            header: ["Authorization": "Bearer $TOKEN$", "Content-Type": "application/json", "User-Agent": "antigravity/3.0.0 Darwin/arm64"], data: payload)
     }
 
     static func request(for account: ProxyAccount) throws -> ProxyAPICall {

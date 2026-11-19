@@ -98,11 +98,12 @@ public struct MenuBarQuotaPair: Equatable, Sendable {
                 requiresBoth: true
             )
         case .antigravity:
+            let group = primaryModels(for: provider, from: models).contains { $0.name.hasPrefix("antigravity-gemini-") } ? "gemini" : "claude-gpt"
             return makePair(
                 from: models,
-                topNames: ["antigravity-gemini-session", "antigravity-claude-gpt-session"],
+                topNames: ["antigravity-\(group)-session"],
                 topLabelKey: "quota.metric.session",
-                bottomNames: ["antigravity-gemini-weekly", "antigravity-claude-gpt-weekly"],
+                bottomNames: ["antigravity-\(group)-weekly"],
                 bottomLabelKey: "quota.metric.weekly"
             )
         case .devin:
@@ -134,6 +135,14 @@ public struct MenuBarQuotaPair: Equatable, Sendable {
         default:
             return nil
         }
+    }
+
+    /// The windows the menu bar summarizes. Antigravity's Claude & GPT allowance is
+    /// secondary to its Gemini allowance and only stands in when Gemini is absent.
+    public static func primaryModels(for provider: QuotaProvider, from models: [QuotaMetric]) -> [QuotaMetric] {
+        guard provider == .antigravity else { return models }
+        let gemini = models.filter { $0.name.hasPrefix("antigravity-gemini-") }
+        return gemini.isEmpty ? models : gemini
     }
 
     private static func makePair(
