@@ -50,6 +50,10 @@ final class ProviderVisibilityTests: XCTestCase {
         preferences.updateAvailableProviders([claude, antigravity])
         XCTAssertEqual(preferences.availableQuotaWindows, [.claudeFable, .antigravityClaudeGPT])
 
+        // A hidden window stays listed even while no account reports it.
+        preferences.updateAvailableProviders([account("claude")])
+        XCTAssertEqual(preferences.availableQuotaWindows, [.claudeFable, .antigravityClaudeGPT])
+
         let reopened = DisplayPreferences(defaults: defaults)
         XCTAssertFalse(reopened.showsQuotaWindow(.claudeFable))
         XCTAssertFalse(reopened.showsQuotaWindow(.antigravityClaudeGPT))

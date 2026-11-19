@@ -294,6 +294,9 @@ final class MenuBarDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             guard generation == endpointGeneration else { return }
+            // Passive proxy signals can briefly replace cached quotas and omit
+            // optional windows. Offer the windows from the fresh quota readings.
+            preferences.updateAvailableProviders(accounts)
             let failures = accounts.filter { $0.quotaReadState.isFailure }.count
             message = "Connected • refreshed " + Date().formatted(date: .omitted, time: .shortened)
             message += fetchedCount == 0 ? "\nNo quota readings fetched." : "\nQuota responses received for \(fetchedCount) account\(fetchedCount == 1 ? "" : "s")."

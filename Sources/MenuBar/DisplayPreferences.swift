@@ -44,7 +44,8 @@ final class DisplayPreferences {
         let builtIn = QuotaProvider.allCases.filter { ActiveQuotaParser.supports($0.rawValue) }
         availableProviders = Set(configured + builtIn).sorted { providerName($0) < providerName($1) }
         let reported = Set(accounts.flatMap { $0.providerQuota().models.map(\.name) })
-        availableQuotaWindows = OptionalQuotaWindow.allCases.filter { !reported.isDisjoint(with: $0.metricNames) }
+        // Keep hidden windows listed so they can always be shown again.
+        availableQuotaWindows = OptionalQuotaWindow.allCases.filter { !reported.isDisjoint(with: $0.metricNames) || !showsQuotaWindow($0) }
     }
 
     func showsQuotaWindow(_ window: OptionalQuotaWindow) -> Bool {

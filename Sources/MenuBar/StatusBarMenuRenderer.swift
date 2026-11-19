@@ -468,8 +468,11 @@ struct CompactQuotaAccountView: View {
     }
 
     private var meterLabelWidth: CGFloat {
-        // Antigravity's secondary group carries a "Claude & GPT" prefix.
-        provider == .antigravity ? 128 : provider == .claude || provider == .codex || provider == .opencodeGo ? 48 : 70
+        // Only Antigravity's Claude & GPT rows carry a long prefix; its Gemini rows match Claude's labels.
+        if provider == .antigravity {
+            return account.quota.models.contains { $0.name.hasPrefix("antigravity-claude-gpt-") } ? 128 : 48
+        }
+        return provider == .claude || provider == .codex || provider == .opencodeGo ? 48 : 70
     }
 
     private func quotaRow(_ metric: QuotaMetric, now: Date) -> some View {
