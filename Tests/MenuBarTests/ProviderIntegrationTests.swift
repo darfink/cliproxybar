@@ -154,6 +154,7 @@ final class ProviderIntegrationTests: XCTestCase {
         XCTAssertEqual(quota.planType, "Pro")
     }
 
+    @MainActor
     func testAntigravityGeminiWindowsLeadAndClaudeGPTWindowsArePrefixed() throws {
         let body = #"{"groups":[{"displayName":"Claude and GPT models","buckets":[{"window":"weekly","remainingFraction":0.9},{"window":"5h","remainingFraction":0.2}]},{"displayName":"Gemini Models","buckets":[{"window":"weekly","remainingFraction":0.6},{"window":"5h","remainingFraction":0.8}]}]}"#
         let quota = try GoogleQuotaParser.summary(Data(body.utf8))
