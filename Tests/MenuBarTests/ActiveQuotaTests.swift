@@ -68,6 +68,12 @@ final class ActiveQuotaTests: XCTestCase {
         XCTAssertEqual(request.url, "https://chatgpt.com/backend-api/wham/usage")
         XCTAssertEqual(request.method, "GET")
     }
+    func testAntigravityQuotaUsesTheHostThatServesProxyTraffic() throws {
+        let account = try JSONDecoder().decode(ProxyAccount.self, from: Data(#"{"name":"test","provider":"antigravity","auth_index":"index-2"}"#.utf8))
+        let request = try ActiveQuotaParser.googleRequest(for: account, operation: "retrieveUserQuotaSummary", payload: "{}")
+        XCTAssertEqual(request.url, "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary")
+        XCTAssertEqual(request.authIndex, "index-2")
+    }
     func testMissingAuthIndexFailsRatherThanUsingAnotherAccount() throws {
         let account = try JSONDecoder().decode(ProxyAccount.self, from: Data(#"{"name":"test","provider":"claude"}"#.utf8))
         XCTAssertThrowsError(try ActiveQuotaParser.request(for: account))

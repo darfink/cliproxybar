@@ -10,10 +10,13 @@ enum ActiveQuotaParser {
             || pluginProviders.contains(QuotaProviderRegistry.normalize(account.provider))
     }
 
+    // CLIProxyAPI sends Antigravity traffic to the daily host. The production host
+    // keeps a separate, unused meter, so read quota where the usage is counted.
     // Google omits the Gemini quota group for Antigravity clients older than 3.0.
+    static let googleQuotaHost = "https://daily-cloudcode-pa.googleapis.com"
     static func googleRequest(for account: ProxyAccount, operation: String, payload: String) throws -> ProxyAPICall {
         guard let index = account.auth_index, !index.isEmpty else { throw LocalClientError.missingAuthIndex }
-        return ProxyAPICall(authIndex: index, method: "POST", url: "https://cloudcode-pa.googleapis.com/v1internal:" + operation,
+        return ProxyAPICall(authIndex: index, method: "POST", url: googleQuotaHost + "/v1internal:" + operation,
             header: ["Authorization": "Bearer $TOKEN$", "Content-Type": "application/json", "User-Agent": "antigravity/3.0.0 Darwin/arm64"], data: payload)
     }
 
