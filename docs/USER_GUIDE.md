@@ -42,7 +42,7 @@ Settings opens on **Display** by default. All four tabs stay visible across the 
 | **Display** | Quota display, paired percentages, countdowns, default menu layout, provider visibility, and optional quota windows. |
 | **Accounts** | Provider credentials and removal. |
 | **Alerts & History** | Reset notifications, confetti, quota recording, and token collection. |
-| **Connection** | Proxy URL, management key, and automatic updates. |
+| **Connection** | Proxy URL, management key, open at login, and automatic updates. |
 
 The footer shows the app version, **Check for Updates…**, and **Done** in every tab.
 

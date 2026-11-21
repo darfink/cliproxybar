@@ -36,6 +36,31 @@ enum QuotaResetKind: String, Codable, Sendable {
         }
     }
 
+    /// The reset period without the model scope, such as "Weekly" for "Weekly (Fable)".
+    static func period(_ name: String) -> String {
+        let text = label(name)
+        guard let open = text.firstIndex(of: "(") else { return text }
+        return text[..<open].trimmingCharacters(in: .whitespaces)
+    }
+
+    /// The model group that a window covers, or nil for the account's general window.
+    static func scope(_ name: String) -> String? {
+        switch name {
+        case "seven-day-sonnet": return "Sonnet"
+        case "seven-day-opus": return "Opus"
+        case "seven-day-fable": return "Fable"
+        default:
+            guard name.hasPrefix("antigravity-") else { return nil }
+            var group = String(name.dropFirst("antigravity-".count))
+            for suffix in ["-session", "-weekly"] where group.hasSuffix(suffix) { group = String(group.dropLast(suffix.count)) }
+            switch group {
+            case "gemini": return "Gemini"
+            case "claude-gpt": return "Claude & GPT"
+            default: return group.split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
+            }
+        }
+    }
+
     static func parentMetrics(of name: String) -> [String] {
         switch name {
         case "five-hour-session", "seven-day-sonnet", "seven-day-opus", "seven-day-fable":

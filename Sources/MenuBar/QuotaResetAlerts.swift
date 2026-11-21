@@ -118,8 +118,7 @@ final class QuotaResetAlerts: NSObject, UNUserNotificationCenterDelegate {
                 accountName.caseInsensitiveCompare($0) == .orderedSame
             }
             content.subtitle = repeatsProvider ? "" : accountName
-            content.body = group.map(\.windowName).sorted().joined(separator: ", ")
-                + (group.count == 1 ? " allowance restored." : " allowances restored.")
+            content.body = Self.body(for: group.map(\.metric))
             content.sound = .default
             content.threadIdentifier = "quota-reset-" + first.accountID
             let identifier = ProxyUsageHistory.digest(group.map(\.identifier).sorted().joined(separator: "\n"))
@@ -128,6 +127,42 @@ final class QuotaResetAlerts: NSObject, UNUserNotificationCenterDelegate {
                 issue = nil
             } catch { issue = "A reset notification could not be delivered. Check macOS notification settings." }
         }
+    }
+
+    /// Writes one sentence, such as "Weekly limit restored, including Fable."
+    /// A scoped window, such as Fable, belongs to the weekly window of the same period.
+    nonisolated static func body(for metrics: [String]) -> String {
+        let order = ["Session", "Rolling", "Weekly", "Monthly"]
+        var windows: [String: (unscoped: Bool, scopes: [String])] = [:]
+        for metric in Set(metrics) {
+            let window = QuotaResetKind.period(metric)
+            var entry = windows[window] ?? (false, [])
+            if let scope = QuotaResetKind.scope(metric) { entry.scopes.append(scope) } else { entry.unscoped = true }
+            windows[window] = entry
+        }
+        let sorted = windows.keys.sorted { (order.firstIndex(of: $0) ?? order.count, $0) < (order.firstIndex(of: $1) ?? order.count, $1) }
+        var limits: [String] = []
+        var included: [String] = []
+        for window in sorted {
+            guard let entry = windows[window] else { continue }
+            // Gemini leads, in the same order as the drop-down.
+            let scopes = entry.scopes.sorted { ($0 == "Gemini" ? 0 : 1, $0) < ($1 == "Gemini" ? 0 : 1, $1) }
+            if entry.unscoped {
+                limits.append(window.lowercased())
+                if !scopes.isEmpty { included.append(list(scopes) + (sorted.count > 1 ? " " + window.lowercased() : "")) }
+            } else {
+                limits.append(list(scopes) + " " + window.lowercased())
+            }
+        }
+        let scopedOnly = limits.count == 1 && !(windows[sorted[0]]?.unscoped ?? true)
+        let count = scopedOnly ? (windows[sorted[0]]?.scopes.count ?? 1) : limits.count
+        var sentence = list(limits) + (count == 1 ? " limit restored" : " limits restored")
+        if !included.isEmpty { sentence += ", including " + list(included) }
+        return sentence.prefix(1).uppercased() + sentence.dropFirst() + "."
+    }
+
+    private nonisolated static func list(_ items: [String]) -> String {
+        items.count <= 2 ? items.joined(separator: " and ") : items.dropLast().joined(separator: ", ") + " and " + items[items.count - 1]
     }
 
     func stop() { confetti.stop() }

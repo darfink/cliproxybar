@@ -388,4 +388,19 @@ final class QuotaResetTests: XCTestCase {
         }
         #endif
     }
+    func testResetNotificationBodyReadsAsOneSentence() {
+        let cases: [([String], String)] = [
+            (["seven-day-weekly", "seven-day-fable"], "Weekly limit restored, including Fable."),
+            (["seven-day-weekly", "seven-day-opus", "seven-day-fable"], "Weekly limit restored, including Fable and Opus."),
+            (["seven-day-fable"], "Fable weekly limit restored."),
+            (["five-hour-session", "seven-day-weekly"], "Session and weekly limits restored."),
+            (["five-hour-session", "seven-day-weekly", "seven-day-fable"], "Session and weekly limits restored, including Fable weekly."),
+            (["codex-session"], "Session limit restored."),
+            (["antigravity-claude-gpt-weekly", "antigravity-gemini-weekly"], "Gemini and Claude & GPT weekly limits restored."),
+            (["opencode-go-rolling", "opencode-go-monthly"], "Rolling and monthly limits restored."),
+        ]
+        for (metrics, expected) in cases {
+            XCTAssertEqual(QuotaResetAlerts.body(for: metrics), expected, metrics.joined(separator: ", "))
+        }
+    }
 }

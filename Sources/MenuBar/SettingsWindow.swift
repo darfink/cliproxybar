@@ -229,6 +229,7 @@ private struct ConnectionSettingsView: View {
     @State private var keyDraft = ""
     @State private var keyMessage = "Stored in your macOS Keychain. The saved key stays hidden."
     @State private var keyFailed = false
+    @State private var loginItem = LoginItem()
 
     private func saveKey() {
         do {
@@ -275,6 +276,12 @@ private struct ConnectionSettingsView: View {
             Text(keyMessage).font(.caption)
                 .foregroundStyle(keyFailed ? Color.red : Color.secondary)
             Divider()
+            Text("Startup").font(.headline)
+            Toggle("Open at login", isOn: Binding(get: { loginItem.isEnabled }, set: { loginItem.setEnabled($0) }))
+                .toggleStyle(.checkbox)
+            Text(loginItem.statusText).font(.caption)
+                .foregroundStyle(loginItem.issue == nil ? Color.secondary : Color.red)
+            Divider()
             Text("App updates").font(.headline)
             Toggle("Automatically check for updates", isOn: $updater.automaticallyChecksForUpdates)
                 .toggleStyle(.checkbox)
@@ -284,6 +291,6 @@ private struct ConnectionSettingsView: View {
             Text("Signed updates from GitHub Releases.")
                 .font(.caption).foregroundStyle(.secondary)
         }
-        .onAppear { endpointDraft = preferences.endpoint }
+        .onAppear { endpointDraft = preferences.endpoint; loginItem.refresh() }
     }
 }
