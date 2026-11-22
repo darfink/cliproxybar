@@ -1,8 +1,8 @@
-CLIProxyBar 0.4.9 shows the Antigravity usage that your proxy traffic consumes:
+CLIProxyBar 0.4.10 makes reset alerts easier to read and can open at login:
 
-- Antigravity quota now comes from Google's daily service. CLIProxyAPI sends its Antigravity requests to that service.
-- Before this release, the app read a separate meter on Google's production service. That meter stayed at 0% used for proxy traffic.
-- The Gemini quota includes Gemini 4 models, such as Gemini 4 Neon.
+- Reset notifications now read as one sentence, such as "Weekly limit restored, including Fable."
+- Antigravity reset notifications name the group, such as "Gemini weekly limit restored."
+- Settings → Connection → Startup has an Open at login checkbox. It uses the macOS login item, so it matches System Settings → General → Login Items.
 
 Requires macOS 14 or later and a CLIProxyAPI instance with management access.
 OpenCode Go requires a plugin with native generic quota support.
